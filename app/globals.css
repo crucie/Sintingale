@@ -1,0 +1,115 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --brand: #f44d1a;
+  --brand-hover: #e0420f;
+  --brand-fg: #ffffff;
+  --brand-soft: color-mix(in oklab, var(--brand) 12%, transparent);
+
+  --bg: #ffffff;
+  --surface: #fcfbfa;
+  --muted: #f5f2f0;
+  --border: #ebe6e2;
+  --fg: #1d1410;
+  --fg-muted: #6f6560;
+
+  --success: #16a34a;
+  --success-soft: color-mix(in oklab, #16a34a 12%, transparent);
+  --warning: #d97706;
+  --warning-soft: color-mix(in oklab, #d97706 14%, transparent);
+  --danger: #dc2626;
+  --danger-soft: color-mix(in oklab, #dc2626 12%, transparent);
+
+  /* Landing page surfaces: pure orange + white in light mode. */
+  --l-paper: #ffffff;
+  --l-flood: #f44d1a;
+  --l-tile: #ffffff;
+  --l-tile-ink: #f44d1a;
+  --l-cta: #ffffff;
+  --l-cta-ink: #f44d1a;
+}
+
+.dark {
+  --bg: #0f0c0b;
+  --surface: #161210;
+  --muted: #211b18;
+  --border: #2e2622;
+  --fg: #f6f1ee;
+  --fg-muted: #a5998f;
+  --brand-soft: color-mix(in oklab, var(--brand) 20%, transparent);
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #f87171;
+
+  --l-paper: #0d0a09;
+  --l-flood: #170e0a;
+  --l-tile: #21140f;
+  --l-tile-ink: #ff7247;
+  --l-cta: #f44d1a;
+  --l-cta-ink: #ffffff;
+}
+
+.dark .flood-glow {
+  background-image:
+    radial-gradient(ellipse 70% 55% at 50% 0%, color-mix(in oklab, var(--brand) 24%, transparent), transparent 70%),
+    radial-gradient(ellipse 50% 40% at 100% 100%, color-mix(in oklab, var(--brand) 10%, transparent), transparent 70%);
+}
+
+@theme inline {
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-fg: var(--brand-fg);
+  --color-brand-soft: var(--brand-soft);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-paper: var(--l-paper);
+  --color-flood: var(--l-flood);
+  --color-tile: var(--l-tile);
+  --color-tile-ink: var(--l-tile-ink);
+  --color-cta: var(--l-cta);
+  --color-cta-ink: var(--l-cta-ink);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-bricolage);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+::selection {
+  background: var(--brand);
+  color: var(--brand-fg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
