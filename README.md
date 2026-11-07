@@ -313,6 +313,27 @@ npm run test:contracts   # Foundry: ProjectSplitter (14 tests incl. fuzzed "cred
 - **No refunds or recurring pulls yet.** Renewal means paying a new invoice. `permit`-based pulls and one-click
   refunds are next.
 
+## Build timeline
+
+All times are IST, taken from the [commit history](https://github.com/crucie/Sintingale/commits/main). There are 91
+commits: 16 on 5 November, 48 on 6 November and 27 on 7 November.
+
+| When | What | Pull request |
+|---|---|---|
+| 5 Nov, 18:04–20:06 | Spec, Next.js scaffold, design tokens, `PaymentRouter` contract | [#1](https://github.com/crucie/Sintingale/pull/1) |
+| 5 Nov, 20:24–22:31 | Config, Whitechain chain and ABIs, entity schema, shared types | [#2](https://github.com/crucie/Sintingale/pull/2) |
+| 5 Nov, 22:46 – 6 Nov, 01:22 | Ledger interface and the Arkiv SDK backend | [#3](https://github.com/crucie/Sintingale/pull/3) |
+| 6 Nov, 09:34–13:34 | API, relayer (`Paid` event verification), access check, SDK | [#4](https://github.com/crucie/Sintingale/pull/4) |
+| 6 Nov, 14:05–16:01 | UI kit, wallet connect, network guard | [#5](https://github.com/crucie/Sintingale/pull/5) |
+| 6 Nov, 16:14–19:40 | Merchant dashboard: products, invoices, settings | [#6](https://github.com/crucie/Sintingale/pull/6) |
+| 6 Nov, 19:58–21:36 | Customer checkout and public receipt verification | [#7](https://github.com/crucie/Sintingale/pull/7) |
+| 6 Nov, 21:49–22:15 | Paywalled example SaaS app | [#8](https://github.com/crucie/Sintingale/pull/8) |
+| 6 Nov, 22:28 – 7 Nov, 00:34 | Landing page, first README | [#9](https://github.com/crucie/Sintingale/pull/9) |
+| 7 Nov, 08:55–10:07 | Teams & ENS, `ProjectSplitter`, agent grants, tests, deploy scripts, sponsor docs. Contracts deployed and verified on Whitechain Sepolia at 09:42. | [#10](https://github.com/crucie/Sintingale/pull/10) |
+| 7 Nov, 11:10–11:56 | First live runs against Arkiv, which surfaced the `str` size and lifetime limits now in [`arkiv/friction.md`](./arkiv/friction.md); CSV export; production hardening (Arkiv and Whitechain required, demo data removed) | direct to `main` |
+
+The Teams & ENS work in #10 was built overnight and committed in the morning of 7 November as nine separate commits.
+
 ## How we used AI
 
 We used AI coding agents in Cursor throughout the hackathon, as ETHGlobal's rules require us to disclose:
