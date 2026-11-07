@@ -24,7 +24,7 @@ const orgAttrs = {
   ensName: "acme.eth",
   owner: lc(owner.address),
   payout: lc(owner.address),
-  merchantId: "m_demo",
+  merchantId: "m_sintingale",
   verifyMethod: "addr" as const,
   verifiedAt: 1,
 };

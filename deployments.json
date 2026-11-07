@@ -21,8 +21,7 @@
   },
   "token": {
     "address": "0xcedfB56113143d55b2358b8CFbB0dEB5Ad2f55a7",
-    "decimals": 6,
-    "mock": false
+    "decimals": 6
   },
   "splitterAllowList": [
     "0xcedfB56113143d55b2358b8CFbB0dEB5Ad2f55a7"

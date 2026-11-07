@@ -5,8 +5,7 @@
 //   node --env-file=.env scripts/deploy.mjs
 //
 // Env: DEPLOYER_PRIVATE_KEY (required, funded with test WBT), WHITECHAIN_RPC_URL,
-// USDT_ADDRESS (defaults to the official token). DEPLOY_MOCK_USDT=true deploys
-// MockUSDT for local experiments only; payments in it do not count as USDT settlement.
+// USDT_ADDRESS (defaults to the official test USDT).
 import { readFileSync, writeFileSync } from "node:fs";
 import {
   createPublicClient,
@@ -16,7 +15,6 @@ import {
   formatEther,
   getAddress,
   http,
-  parseUnits,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
@@ -58,15 +56,8 @@ const balance = await client.getBalance({ address: account.address });
 console.log(`Deployer ${account.address} on chain ${chainId}, balance ${formatEther(balance)} WBT`);
 if (balance === 0n) throw new Error("Deployer has no WBT. Claim some at https://faucet.testnet.whitechain.io");
 
-const useMock = process.env.DEPLOY_MOCK_USDT === "true";
-let usdt = getAddress(process.env.USDT_ADDRESS || OFFICIAL_USDT);
-if (useMock) {
-  usdt = await deploy("MockUSDT");
-  const { abi } = artifact("MockUSDT");
-  const hash = await wallet.writeContract({ address: usdt, abi, functionName: "mint", args: [account.address, parseUnits("1000", 6)] });
-  await client.waitForTransactionReceipt({ hash });
-  console.log(`minted 1,000 MockUSDT to ${account.address} (does not count as USDT settlement)`);
-} else if (usdt !== OFFICIAL_USDT) {
+const usdt = getAddress(process.env.USDT_ADDRESS || OFFICIAL_USDT);
+if (usdt !== OFFICIAL_USDT) {
   console.warn(`Warning: ${usdt} is not the official test USDT ${OFFICIAL_USDT}.`);
 }
 
@@ -82,7 +73,7 @@ const deployments = {
   deployer: account.address,
   contracts: Object.fromEntries(Object.entries(deployed).map(([name, d]) => [name, d.address])),
   transactions: deployed,
-  token: { address: usdt, decimals: 6, mock: useMock },
+  token: { address: usdt, decimals: 6 },
   splitterAllowList: allowList,
   splitterConstructorArgs: splitterArgs,
 };
@@ -92,7 +83,6 @@ const verifier = `--rpc-url ${rpc} --verifier blockscout --verifier-url ${explor
 console.log("\nVerify on the Whitechain explorer (run from contracts/):");
 console.log(`forge verify-contract ${router} src/PaymentRouter.sol:PaymentRouter ${verifier}`);
 console.log(`forge verify-contract ${splitter} src/ProjectSplitter.sol:ProjectSplitter ${verifier} --constructor-args ${splitterArgs}`);
-if (useMock) console.log(`forge verify-contract ${usdt} src/MockUSDT.sol:MockUSDT ${verifier}`);
 
 console.log("\nAdd to .env:");
 console.log(`NEXT_PUBLIC_PAYMENT_ROUTER_ADDRESS=${router}`);

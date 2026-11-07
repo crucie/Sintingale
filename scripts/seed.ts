@@ -1,22 +1,15 @@
 // Seeds a real organisation against a running Sintingale deployment (testnets):
-// turns on Teams & ENS, links the ENS name, creates a project with shares and a
-// project invoice.
+// turns on Teams & ENS, links the ENS name and creates a project.
 //
 //   OWNER_PRIVATE_KEY=0x…        wallet that controls ENS_NAME on Sepolia
 //   ENS_NAME=acme.eth            its ETH address (or sintingale.owner text) must be that wallet
-//   MEMBERS="alice.acme.eth:3,bob.acme.eth:2"   optional subnames that already resolve
 //   BASE_URL=http://localhost:3000
 //   npm run seed
-//
-// The owner always gets a share (contribution OWNER_CONTRIBUTION, default 5).
-// With the ProjectSplitter configured, set shares from the dashboard instead:
-// they need an on-chain createProject transaction from the owner's wallet.
 import { privateKeyToAccount } from "viem/accounts";
 import { createSiweMessage } from "viem/siwe";
 import { authMessage } from "../lib/arkiv/messages";
 import { projectIdToBytes32 } from "../lib/chain/splitter";
 import type { AttrsByType, AuthorizedType } from "../lib/schema";
-import { contributionsToBps } from "../lib/splits";
 
 const base = process.env.BASE_URL ?? "http://localhost:3000";
 const ensName = (process.env.ENS_NAME ?? "").toLowerCase();
@@ -67,7 +60,7 @@ await call("/api/merchants", {
 });
 console.log("✓ Teams & ENS enabled");
 
-const check = await call<{ ok: boolean; method: "addr" | "text" | "demo"; resolvedAddress: string }>(
+const check = await call<{ ok: boolean; method: "addr" | "text"; resolvedAddress: string }>(
   `/api/ens/check?name=${ensName}&address=${me}`,
 );
 if (!check.ok) throw new Error(`${me} does not control ${ensName} (resolves to ${check.resolvedAddress})`);
@@ -107,45 +100,4 @@ await call("/api/projects", {
 });
 console.log("✓ project Launch created");
 
-if (process.env.NEXT_PUBLIC_SPLITTER_ADDRESS) {
-  console.log("ProjectSplitter configured: set shares from the dashboard (needs an on-chain createProject). Done.");
-  process.exit(0);
-}
-
-const rows = [
-  { subname: ensName, contribution: Number(process.env.OWNER_CONTRIBUTION ?? 5) },
-  ...(process.env.MEMBERS ?? "")
-    .split(",")
-    .filter(Boolean)
-    .map((m) => ({ subname: m.split(":")[0].toLowerCase(), contribution: Number(m.split(":")[1] ?? 1) })),
-];
-const proposal = await call<{ rows: Array<{ subname: string; contribution: number; address: string | null }>; resolvedAt: number }>(
-  `/api/projects/${projectId}/shares`,
-  { method: "PUT", body: JSON.stringify({ orgId: ensName, rows }) },
-);
-const missing = proposal.rows.filter((r) => !r.address);
-if (missing.length) throw new Error(`Not resolving yet: ${missing.map((m) => m.subname).join(", ")}`);
-const bps = contributionsToBps(proposal.rows.map((r) => r.contribution));
-await call(`/api/projects/${projectId}/shares`, {
-  method: "POST",
-  body: JSON.stringify({
-    attrs: await signed("project", {
-      orgId: ensName,
-      projectId,
-      name: "Launch",
-      description: "Seeded by scripts/seed.ts",
-      splitContract: "simulated",
-      onchainId,
-      version: 1,
-      shares: proposal.rows.map((r, i) => ({ subname: r.subname, account: r.address!, bps: bps[i], contribution: r.contribution, resolvedAt: proposal.resolvedAt })),
-      updatedAt: now(),
-    }),
-  }),
-});
-console.log(`✓ shares: ${proposal.rows.map((r, i) => `${r.subname} ${(bps[i] / 100).toFixed(2)}%`).join(", ")}`);
-
-const invoice = await call<{ checkoutUrl: string }>("/api/invoices", {
-  method: "POST",
-  body: JSON.stringify({ merchantId: merchant.merchantId, orgId: ensName, projectId, amount: "10", currency: "USDT", dueInHours: 24 }),
-});
-console.log(`✓ project invoice: ${invoice.checkoutUrl}`);
+console.log("Next: set the share table from Dashboard → Projects. Saving it sends createProject to the ProjectSplitter from your wallet.");

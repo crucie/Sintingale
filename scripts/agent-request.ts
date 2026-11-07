@@ -18,7 +18,7 @@ const env = (k: string, fallback?: string) => {
 const account = privateKeyToAccount(env("AGENT_PRIVATE_KEY") as `0x${string}`);
 const base = env("BASE_URL", "http://localhost:3000");
 const body = JSON.stringify({
-  merchantId: env("MERCHANT_ID", "m_demo"),
+  merchantId: env("MERCHANT_ID", "m_sintingale"),
   orgId: env("ORG_ID"),
   projectId: env("PROJECT_ID"),
   amount: env("AMOUNT", "10"),

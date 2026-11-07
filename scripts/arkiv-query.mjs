@@ -2,10 +2,10 @@
 //
 //   node scripts/arkiv-query.mjs <type> [attr=value ...] [attr>number ...] [--creator 0x…] [--limit n]
 //
-//   # Every receipt for the demo merchant, trusted only if the Sintingale writer created it
-//   node scripts/arkiv-query.mjs receipt merchantId=m_demo --creator 0xf9277DD2A25085F868796073A9BF8c0d37F6bb06
+//   # Every receipt for the merchant, trusted only if the Sintingale writer created it
+//   node scripts/arkiv-query.mjs receipt merchantId=m_sintingale --creator 0xf9277DD2A25085F868796073A9BF8c0d37F6bb06
 //   # Active entitlements: exactly the query behind /api/access and hasAccess()
-//   node scripts/arkiv-query.mjs entitlement merchantId=m_demo planId=pro periodEnd>now --creator 0xf9277DD2A25085F868796073A9BF8c0d37F6bb06
+//   node scripts/arkiv-query.mjs entitlement merchantId=m_sintingale planId=pro periodEnd>now --creator 0xf9277DD2A25085F868796073A9BF8c0d37F6bb06
 //
 // Types: merchant plan invoice receipt entitlement org project member invite inviteAccept
 // payout grant revocation claim. `now` is replaced with the current unix time.

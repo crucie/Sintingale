@@ -1,6 +1,6 @@
 # Wallets and test funds
 
-Nothing here is needed for demo mode (in-memory ledger, simulated payments). Fund wallets only for live testnet mode.
+Every wallet below is needed to run Sintingale. There is no simulated mode.
 
 | Wallet | Network | Needs | Why | Where |
 |---|---|---|---|---|
@@ -16,4 +16,4 @@ Tips:
 
 - One wallet can play merchant, org owner and team-member roles while rehearsing; use a second browser profile for the customer.
 - The Whitechain faucet allows one claim per GitHub account per 24 hours. Claim early.
-- Customers need the configured test USDT (see `.env.example`). `DEPLOY_MOCK_USDT=true` deploys MockUSDT for local experiments only.
+- Customers need the official test USDT `0xcedfB56113143d55b2358b8CFbB0dEB5Ad2f55a7` (see `.env.example`).
