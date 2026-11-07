@@ -1,13 +1,31 @@
 {
   "network": "whitechain-sepolia",
   "chainId": 1874,
-  "deployedAt": null,
-  "deployer": null,
+  "deployedAt": "2026-11-07T04:11:06.750Z",
+  "deployer": "0xF82224Cba613B8eE0401710054E31593381033B5",
   "contracts": {
-    "PaymentRouter": null,
-    "ProjectSplitter": null
+    "PaymentRouter": "0x0d72fafa591e6e5d83db0d6ac6162e38f17c333b",
+    "ProjectSplitter": "0xb9e1754493a3f02a60266e486a1ffc7f39042ef6"
   },
-  "token": { "address": "0xcedfB56113143d55b2358b8CFbB0dEB5Ad2f55a7", "decimals": 6, "mock": false },
-  "splitterAllowList": [],
-  "note": "Not deployed yet. Run `node --env-file=.env scripts/deploy.mjs` (see README) and this file is rewritten with live addresses."
+  "transactions": {
+    "PaymentRouter": {
+      "address": "0x0d72fafa591e6e5d83db0d6ac6162e38f17c333b",
+      "tx": "0x499c674a47ecbf92214e3071d6d954efc6f9451a0814f37497db77acf1683b94",
+      "block": 12428297
+    },
+    "ProjectSplitter": {
+      "address": "0xb9e1754493a3f02a60266e486a1ffc7f39042ef6",
+      "tx": "0x9b642ff251ab3d0a63d8e1c8e455ce13428ec41bba016254fe431445d50bf599",
+      "block": 12428300
+    }
+  },
+  "token": {
+    "address": "0xcedfB56113143d55b2358b8CFbB0dEB5Ad2f55a7",
+    "decimals": 6,
+    "mock": false
+  },
+  "splitterAllowList": [
+    "0xcedfB56113143d55b2358b8CFbB0dEB5Ad2f55a7"
+  ],
+  "splitterConstructorArgs": "0x00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000001000000000000000000000000cedfb56113143d55b2358b8cfbb0deb5ad2f55a7"
 }

@@ -10,8 +10,8 @@ A SaaS backend checks access with one query. Built from scratch at ETHGlobal Mum
 
 | | |
 |---|---|
-| `PaymentRouter` (Whitechain Sepolia, verified) | TODO `https://explorer.testnet.whitechain.io/address/0x…` |
-| `ProjectSplitter` (Whitechain Sepolia, verified) | TODO `https://explorer.testnet.whitechain.io/address/0x…` |
+| `PaymentRouter` (Whitechain Sepolia, verified) | [`0x0d72fafa591e6e5d83db0d6ac6162e38f17c333b`](https://explorer.testnet.whitechain.io/address/0x0d72fafa591e6e5d83db0d6ac6162e38f17c333b) |
+| `ProjectSplitter` (Whitechain Sepolia, verified) | [`0xb9e1754493a3f02a60266e486a1ffc7f39042ef6`](https://explorer.testnet.whitechain.io/address/0xb9e1754493a3f02a60266e486a1ffc7f39042ef6) |
 | USDT used | [`0xcedfB56113143d55b2358b8CFbB0dEB5Ad2f55a7`](https://explorer.testnet.whitechain.io/token/0xcedfB56113143d55b2358b8CFbB0dEB5Ad2f55a7) |
 | USDT payment settled in the main flow | TODO `https://explorer.testnet.whitechain.io/tx/0x…` |
 | Arkiv writer wallet (Rabdi) | TODO `0x…` (the `ARKIV_PRIVATE_KEY` address, shown in Dashboard → Settings → Network) |
