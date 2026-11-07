@@ -3,6 +3,7 @@
 import { Database, Menu, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { SessionChip } from "@/components/org/SessionChip";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { Logo } from "@/components/ui/Logo";
 import { ConnectButton } from "@/components/wallet/ConnectButton";
@@ -52,6 +53,7 @@ export function TopBar() {
         </Link>
         <div className="ml-auto flex items-center gap-2">
           <LedgerBadge />
+          <SessionChip />
           <ThemeToggle />
           <ConnectButton size="sm" className="hidden sm:inline-flex" />
         </div>
