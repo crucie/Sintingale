@@ -8,8 +8,10 @@ import {
   FlaskConical,
   Hourglass,
   Lock,
+  PieChart,
   Receipt,
   RotateCcw,
+  ShieldAlert,
   ShieldCheck,
   Wallet,
 } from "lucide-react";
@@ -18,6 +20,7 @@ import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useConnection } from "wagmi";
 import { ExpiryCountdown } from "@/components/dashboard/ExpiryCountdown";
+import { EnsBadge } from "@/components/org/EnsBadge";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { LogoMark } from "@/components/ui/Logo";
@@ -25,9 +28,10 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { ConnectButton } from "@/components/wallet/ConnectButton";
 import { NetworkGuard } from "@/components/wallet/NetworkGuard";
 import { ApiError, useCheckout, useNow } from "@/lib/client/hooks";
-import { onchainEnabled } from "@/lib/config";
+import { onchainEnabled, splitterEnabled } from "@/lib/config";
 import { formatDate, formatUsdt, shortHash } from "@/lib/format";
 import { RECURRENCE_LABEL } from "@/lib/schema";
+import { formatBps } from "@/lib/splits";
 import { explorerTx } from "@/lib/whitechain";
 import { usePayment } from "./PayButton";
 import { TxStatus } from "./TxStatus";
@@ -104,7 +108,7 @@ export function CheckoutCard({ invoiceKey }: { invoiceKey: string }) {
   }
 
   const data = checkout.data!;
-  const { invoice, merchant, plan } = data;
+  const { invoice, merchant, plan, identity, project } = data;
   const isExpiredLocally = invoice.status === "pending" && now !== null && invoice.expiresAt !== null && invoice.expiresAt * 1000 <= now;
   const result = payment.result ?? (invoice.status === "paid" && invoice.txHash && invoice.receiptKey
     ? { txHash: invoice.txHash, receiptKey: invoice.receiptKey, simulated: Boolean(invoice.simulated) }
@@ -115,15 +119,33 @@ export function CheckoutCard({ invoiceKey }: { invoiceKey: string }) {
 
   const header = (
     <>
-      <div className="flex items-center gap-3">
-        <span className="grid size-10 place-items-center rounded-xl bg-brand font-display text-lg font-bold text-brand-fg">
-          {merchant.name.slice(0, 1).toUpperCase()}
-        </span>
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-fg">{merchant.name}</p>
-          <p className="font-mono text-xs text-fg-muted">{invoice.invoiceId}</p>
+          <p className="mb-1 text-xs text-fg-muted">Paying</p>
+          {identity.ensName ? (
+            <EnsBadge name={identity.ensName} address={identity.resolvedAddress} avatar={identity.avatar} verified={identity.verified} demo={identity.demo} />
+          ) : (
+            <div className="flex items-center gap-3">
+              <span className="grid size-9 place-items-center rounded-xl bg-brand font-display font-bold text-brand-fg">
+                {merchant.name.slice(0, 1).toUpperCase()}
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-fg">{merchant.name}</p>
+                <p className="inline-flex items-center gap-1 text-xs text-fg-muted">
+                  <span className="font-mono">{shortHash(identity.payout || merchant.payout || "0x")}</span> · not name-verified
+                </p>
+              </div>
+            </div>
+          )}
         </div>
+        <p className="shrink-0 font-mono text-xs text-fg-muted">{invoice.invoiceId}</p>
       </div>
+      {identity.ensName && identity.resolvedAddress ? (
+        <p className="mt-2 flex items-center gap-1 text-xs text-fg-muted">
+          Resolves to <span className="font-mono">{shortHash(identity.resolvedAddress, 8, 6)}</span>
+          <CopyButton value={identity.resolvedAddress} label="Copy resolved address" toastMessage="Address copied" className="min-h-7 min-w-7" />
+        </p>
+      ) : null}
       <div className="mt-6">
         {plan && plan.name !== invoice.description ? <p className="text-sm text-fg-muted">{plan.name}</p> : null}
         <h1 className="mt-0.5 font-display text-lg font-semibold text-fg">{invoice.description}</h1>
@@ -206,10 +228,14 @@ export function CheckoutCard({ invoiceKey }: { invoiceKey: string }) {
     );
   }
 
-  const needsWallet = onchainEnabled && !isConnected;
+  const chainMode = project ? splitterEnabled : onchainEnabled;
+  const needsWallet = chainMode && !isConnected;
 
-  const footer =
-    payment.phase === "error" ? (
+  const footer = identity.mismatch ? (
+    <Button size="lg" className="w-full" disabled variant="danger" icon={<ShieldAlert className="size-4" />}>
+      Payment blocked
+    </Button>
+  ) : payment.phase === "error" ? (
       <Button size="lg" className="w-full" onClick={payment.reset} icon={<RotateCcw className="size-4" />}>
         Try again
       </Button>
@@ -222,13 +248,13 @@ export function CheckoutCard({ invoiceKey }: { invoiceKey: string }) {
           className="w-full"
           loading={busy}
           onClick={payment.pay}
-          icon={onchainEnabled ? <Wallet className="size-4" /> : <FlaskConical className="size-4" />}
+          icon={chainMode ? <Wallet className="size-4" /> : <FlaskConical className="size-4" />}
         >
           {busy
             ? payment.phase === "awaiting-wallet"
               ? "Confirm in wallet…"
               : "Confirming…"
-            : `Pay ${formatUsdt(invoice.amount)}${onchainEnabled ? "" : " (simulated)"}`}
+            : `Pay ${formatUsdt(invoice.amount)}${chainMode ? "" : " (simulated)"}`}
         </Button>
       </NetworkGuard>
     );
@@ -236,6 +262,35 @@ export function CheckoutCard({ invoiceKey }: { invoiceKey: string }) {
   return (
     <Shell footer={footer}>
       {header}
+
+      {identity.mismatch ? (
+        <div role="alert" className="mt-5 flex items-start gap-2 rounded-2xl border border-danger/40 bg-danger-soft p-4 text-sm">
+          <ShieldAlert className="mt-0.5 size-5 shrink-0 text-danger" aria-hidden />
+          <div>
+            <p className="font-semibold text-danger">Do not pay this invoice</p>
+            <p className="mt-0.5 text-fg">
+              {identity.ensName} now resolves to {shortHash(identity.resolvedAddress ?? "0x")}, not the payout recorded for this seller (
+              {shortHash(identity.payout)}). Payment is blocked until the seller fixes it.
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {project ? (
+        <div className="mt-5 rounded-2xl border border-border p-4 text-sm">
+          <p className="flex items-center gap-1.5 font-medium text-fg">
+            <PieChart className="size-4 text-brand" aria-hidden /> {project.name}: split by contribution
+          </p>
+          <ul className="mt-2 space-y-1">
+            {project.shares.map((s) => (
+              <li key={s.subname} className="flex items-center justify-between gap-3 text-fg-muted">
+                <span className="truncate">{s.subname}</span>
+                <span className="tabular-nums text-fg">{formatBps(s.bps)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <div className="mt-6 space-y-3 rounded-2xl bg-muted/70 p-4 text-sm">
         <div className="flex items-center justify-between gap-3">
@@ -264,7 +319,7 @@ export function CheckoutCard({ invoiceKey }: { invoiceKey: string }) {
         </p>
       ) : null}
 
-      {!onchainEnabled ? (
+      {!chainMode ? (
         <p className="mt-3 flex items-start gap-2 rounded-xl border border-border px-3 py-2 text-xs text-fg-muted">
           <FlaskConical className="mt-0.5 size-3.5 shrink-0 text-brand" aria-hidden />
           Demo mode: contracts are not configured, so payment is simulated end to end. The receipt and entitlement are still written to the ledger.
@@ -285,7 +340,9 @@ export function CheckoutCard({ invoiceKey }: { invoiceKey: string }) {
 
       <p className="mt-6 flex items-center gap-1.5 text-xs text-fg-muted">
         <ShieldCheck className="size-4 shrink-0 text-success" aria-hidden />
-        Non-custodial: funds go straight to {shortHash(merchant.payout || "0x")} in the same transaction.
+        {project
+          ? "Non-custodial: each share is credited to its member, who claims it from their own wallet."
+          : `Non-custodial: funds go straight to ${shortHash(merchant.payout || "0x")} in the same transaction.`}
       </p>
     </Shell>
   );

@@ -69,6 +69,17 @@ export function useNow(): number | null {
   );
 }
 
+const noopSubscribe = () => () => {};
+
+/** `window.location.origin` on the client, "" during SSR and hydration. */
+export function useOrigin(): string {
+  return useSyncExternalStore(
+    noopSubscribe,
+    () => window.location.origin,
+    () => "",
+  );
+}
+
 /* ------------------------------------------------------------- invoices -- */
 
 const SEEN_KEY = "sintingale:seen-invoices";
@@ -155,6 +166,7 @@ export function useMerchant() {
   return useQuery({
     queryKey: ["merchant", merchantId],
     queryFn: async () => (await api<{ merchant: MerchantDTO }>(`/api/merchants?merchantId=${merchantId}`)).merchant,
+    retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 2,
   });
 }
 
@@ -164,6 +176,16 @@ export function useSaveMerchant() {
     mutationFn: (input: MerchantInput) =>
       api<{ merchant: MerchantDTO }>("/api/merchants", { method: "POST", body: JSON.stringify(input) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["merchant"] }),
+  });
+}
+
+/** Creates the merchant and the demo plans on an empty ledger. */
+export function useSetupMerchant() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: MerchantInput) =>
+      api<{ merchant: MerchantDTO; plansCreated: string[] }>("/api/setup", { method: "POST", body: JSON.stringify(input) }),
+    onSuccess: () => qc.invalidateQueries(),
   });
 }
 

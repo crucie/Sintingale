@@ -6,7 +6,8 @@ import { useConfig, useConnection, useWriteContract } from "wagmi";
 import { readContract, waitForTransactionReceipt } from "wagmi/actions";
 import type { Address, Hex } from "viem";
 import { api, ApiError } from "@/lib/client/hooks";
-import { onchainEnabled, publicConfig } from "@/lib/config";
+import { onchainEnabled, publicConfig, splitterEnabled } from "@/lib/config";
+import { splitterAbi } from "@/lib/chain/splitter";
 import type { CheckoutData } from "@/lib/types";
 import { erc20Abi, invoiceIdToBytes32, paymentRouterAbi, whitechain } from "@/lib/whitechain";
 import type { Step, StepState } from "./TxStatus";
@@ -75,19 +76,21 @@ export function usePayment(data: CheckoutData | undefined, invoiceKey: string) {
     setError(null);
     const amount = BigInt(data.invoice.amount);
     let current: StepId = "approve";
+    const isProject = Boolean(data.project && data.invoice.projectId);
     try {
-      if (!onchainEnabled) {
+      if (data.identity.mismatch) throw new Error("Payment blocked: the seller's ENS name no longer points at its payout address.");
+      if (!(isProject ? splitterEnabled : onchainEnabled)) {
         setPhase("awaiting-wallet");
         mark("approve", "active", "Simulated approval");
         await sleep(700);
         mark("approve", "done");
         current = "pay";
-        mark("pay", "active", "Simulated payInvoice()");
+        mark("pay", "active", isProject ? "Simulated payProjectInvoice()" : "Simulated payInvoice()");
         setPhase("confirming");
         await sleep(1000);
         mark("pay", "done");
         current = "record";
-        mark("record", "active", "Relayer writing receipt + entitlement");
+        mark("record", "active", isProject ? "Relayer writing receipt + payouts" : "Relayer writing receipt + entitlement");
         const res = await notify({ simulated: true, payer: address ?? randomHex(20), txHash: randomHex(32) });
         mark("record", "done", `Receipt ${res.receiptKey.slice(0, 10)}…`);
         setResult({ ...res, simulated: true });
@@ -98,7 +101,7 @@ export function usePayment(data: CheckoutData | undefined, invoiceKey: string) {
 
       if (!address) throw new Error("Connect a wallet first.");
       const token = publicConfig.usdt.address!;
-      const router = publicConfig.paymentRouter!;
+      const router = (isProject ? publicConfig.splitter : publicConfig.paymentRouter)!;
       const merchant = (data.merchant.wallet || data.merchant.payout) as Address;
 
       const balance = await readContract(config, {
@@ -138,13 +141,21 @@ export function usePayment(data: CheckoutData | undefined, invoiceKey: string) {
       current = "pay";
       setPhase("awaiting-wallet");
       mark("pay", "active", "Confirm the payment in your wallet");
-      const payHash = await write.mutateAsync({
-        address: router,
-        abi: paymentRouterAbi,
-        functionName: "payInvoice",
-        args: [invoiceIdToBytes32(data.invoice.invoiceId), merchant, token, amount],
-        chainId: whitechain.id,
-      });
+      const payHash = isProject
+        ? await write.mutateAsync({
+            address: router,
+            abi: splitterAbi,
+            functionName: "payProjectInvoice",
+            args: [data.project!.onchainId as Hex, invoiceIdToBytes32(data.invoice.invoiceId), token, amount],
+            chainId: whitechain.id,
+          })
+        : await write.mutateAsync({
+            address: router,
+            abi: paymentRouterAbi,
+            functionName: "payInvoice",
+            args: [invoiceIdToBytes32(data.invoice.invoiceId), merchant, token, amount],
+            chainId: whitechain.id,
+          });
       setPhase("confirming");
       mark("pay", "active", `Tx ${payHash.slice(0, 10)}… confirming`);
       const receipt = await waitForTransactionReceipt(config, { hash: payHash as Hex, chainId: whitechain.id });
@@ -152,7 +163,7 @@ export function usePayment(data: CheckoutData | undefined, invoiceKey: string) {
       mark("pay", "done", `Confirmed in block ${receipt.blockNumber}`);
 
       current = "record";
-      mark("record", "active", "Relayer verifying the Paid event");
+      mark("record", "active", isProject ? "Relayer verifying the Credited events" : "Relayer verifying the Paid event");
       const res = await notify({ txHash: payHash, payer: address });
       mark("record", "done", `Receipt ${res.receiptKey.slice(0, 10)}…`);
       setResult({ ...res, simulated: false });
@@ -173,8 +184,8 @@ export function usePayment(data: CheckoutData | undefined, invoiceKey: string) {
 
   const stepList: Step[] = [
     { id: "approve", label: "Approve USDT", ...steps.approve },
-    { id: "pay", label: "Pay invoice on Whitechain", ...steps.pay },
-    { id: "record", label: "Receipt written to Arkiv", ...steps.record },
+    { id: "pay", label: data?.project ? "Pay project on Whitechain (split by contribution)" : "Pay invoice on Whitechain", ...steps.pay },
+    { id: "record", label: data?.project ? "Receipt and payouts written to Arkiv" : "Receipt written to Arkiv", ...steps.record },
   ];
 
   return { phase, error, result, steps: stepList, pay, reset };
