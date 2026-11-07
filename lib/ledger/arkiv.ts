@@ -34,7 +34,6 @@ const INDEXES: Record<EntityType, { str: string[]; num: string[] }> = {
   },
   grant: { str: ["orgId", "grantId", "agentName", "agentAddress", "projectId"], num: ["maxAmount", "maxTotal", "createdAt"] },
   revocation: { str: ["orgId", "targetType", "targetId"], num: ["revokedAt"] },
-  claim: { str: ["orgId", "projectId", "account", "txHash"], num: ["amount", "claimedAt"] },
 };
 
 const schemas = Object.fromEntries(
@@ -91,6 +90,7 @@ export class ArkivLedger implements Ledger {
   }
 
   async get<T extends EntityType>(type: T, entityKey: string): Promise<StoredEntity<T> | null> {
+    if (!/^0x[0-9a-fA-F]{64}$/.test(entityKey)) return null;
     const rows = await this.run(type, [eq("$key", keyValue(entityKey as Hex))], undefined, 1);
     return rows[0] ?? null;
   }

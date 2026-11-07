@@ -14,11 +14,10 @@ export const ENTITY_TYPES = [
   "payout",
   "grant",
   "revocation",
-  "claim",
 ] as const;
 export type EntityType = (typeof ENTITY_TYPES)[number];
 
-export const RECURRENCES = ["one-time", "weekly", "monthly", "yearly", "demo-5m"] as const;
+export const RECURRENCES = ["one-time", "weekly", "monthly", "yearly", "five-minutes"] as const;
 export type Recurrence = (typeof RECURRENCES)[number];
 
 /** Billing period length in seconds; `one-time` grants a 30-day entitlement. */
@@ -27,7 +26,7 @@ export const RECURRENCE_SECONDS: Record<Recurrence, number> = {
   weekly: 7 * 86400,
   monthly: 30 * 86400,
   yearly: 365 * 86400,
-  "demo-5m": 5 * 60,
+  "five-minutes": 5 * 60,
 };
 
 export const RECURRENCE_LABEL: Record<Recurrence, string> = {
@@ -35,7 +34,7 @@ export const RECURRENCE_LABEL: Record<Recurrence, string> = {
   weekly: "Weekly",
   monthly: "Monthly",
   yearly: "Yearly",
-  "demo-5m": "Every 5 min (demo)",
+  "five-minutes": "Every 5 minutes",
 };
 
 export interface MerchantAttrs {
@@ -89,7 +88,6 @@ export interface ReceiptAttrs {
   amount: number;
   paidAt: number;
   description: string;
-  simulated: boolean;
   orgId?: string;
   projectId?: string;
   grantId?: string;
@@ -122,7 +120,7 @@ export interface OrgAttrs {
   owner: string;
   payout: string;
   merchantId: string;
-  verifyMethod: "addr" | "text" | "demo";
+  verifyMethod: "addr" | "text";
   verifiedAt: number;
   authSig: string;
 }
@@ -140,7 +138,7 @@ export interface ProjectAttrs {
   projectId: string;
   name: string;
   description: string;
-  /** Splitter contract address, "simulated", or "" before the first share table. */
+  /** Splitter contract address, or "" before the first share table. */
   splitContract: string;
   onchainId: string;
   version: number;
@@ -192,7 +190,6 @@ export interface PayoutAttrs {
   shareBps: number;
   version: number;
   paidAt: number;
-  simulated: boolean;
 }
 
 export interface GrantAttrs {
@@ -217,16 +214,6 @@ export interface RevocationAttrs {
   authSig: string;
 }
 
-/** Simulated-mode claim record; on-chain claims are read from the splitter instead. */
-export interface ClaimAttrs {
-  orgId: string;
-  projectId: string;
-  account: string;
-  amount: number;
-  claimedAt: number;
-  txHash: string;
-}
-
 export interface AttrsByType {
   merchant: MerchantAttrs;
   plan: PlanAttrs;
@@ -241,7 +228,6 @@ export interface AttrsByType {
   payout: PayoutAttrs;
   grant: GrantAttrs;
   revocation: RevocationAttrs;
-  claim: ClaimAttrs;
 }
 
 export type AuthorizedType = "org" | "project" | "member" | "invite" | "grant" | "revocation";
@@ -256,7 +242,7 @@ const money = z
   .string()
   .regex(/^\d+(\.\d{1,6})?$/, "Enter an amount like 10 or 10.50")
   .refine((v) => Number(v) > 0, "Amount must be greater than zero")
-  .refine((v) => Number(v) <= 1_000_000, "Amount is too large for the demo");
+  .refine((v) => Number(v) <= 1_000_000, "Amount is too large");
 
 export const merchantInput = z.object({
   merchantId: slug,
@@ -296,7 +282,6 @@ export const notifyInput = z.object({
   invoiceKey: z.string().min(3).max(80),
   txHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/).optional(),
   payer: address.optional(),
-  simulated: z.boolean().optional(),
 });
 
 /* --------------------------------------------------------- org entities -- */
@@ -323,7 +308,7 @@ export const orgAttrsInput = z.object({
   owner: lowerAddress,
   payout: lowerAddress,
   merchantId: slug,
-  verifyMethod: z.enum(["addr", "text", "demo"]),
+  verifyMethod: z.enum(["addr", "text"]),
   verifiedAt: ts,
   authSig: sig,
 });

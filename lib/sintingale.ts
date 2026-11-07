@@ -3,15 +3,12 @@ import { randomBytes } from "node:crypto";
 import type { Hex } from "viem";
 import { SintingaleError } from "./api";
 import { onchainEnabled, publicConfig, serverConfig, splitterEnabled } from "./config";
-import { isDemoName } from "./demo";
 import { getProfile } from "./ens/resolve";
 import { teamsEnabled } from "./features";
 import { toBaseUnits } from "./format";
 import { getLedger, relayerAddress, type StoredEntity } from "./ledger";
-import { demoPlans } from "./ledger/seed";
 import { getOrgEntity, getOrgForMerchant, getProjectEntity } from "./orgs";
 import { pollCreditedEvents, pollPaidEvents, verifyPaidTx, verifyProjectPaidTx } from "./relayer";
-import { computeCredits } from "./splits";
 import {
   RECURRENCE_SECONDS,
   type InvoiceInput,
@@ -36,8 +33,6 @@ import { invoiceIdToBytes32 } from "./whitechain";
 const DAY = 86400;
 const nowSec = () => Math.floor(Date.now() / 1000);
 const norm = (v: string | undefined) => (v ?? "").trim().toLowerCase();
-const randomHex = (bytes: number) => `0x${randomBytes(bytes).toString("hex")}` as Hex;
-
 /* ----------------------------------------------------------------------------
  * Merchants
  * ------------------------------------------------------------------------- */
@@ -64,20 +59,12 @@ export async function upsertMerchant(input: MerchantInput): Promise<MerchantDTO>
   return { ...entity.attrs, key: entity.key, createdAt: entity.createdAt };
 }
 
-/**
- * First run on an empty ledger (Arkiv mode seeds nothing): writes the merchant
- * plus any of the demo plans that do not exist yet, so `/demo` has plans to sell.
- */
-export async function setupMerchant(input: MerchantInput): Promise<{ merchant: MerchantDTO; plansCreated: string[] }> {
-  const merchant = await upsertMerchant(input);
-  const existing = new Set((await listPlans(input.merchantId)).map((p) => p.planId));
-  const plansCreated: string[] = [];
-  for (const plan of demoPlans(input.merchantId)) {
-    if (existing.has(plan.planId)) continue;
-    await getLedger().create("plan", plan, nowSec() + 365 * DAY);
-    plansCreated.push(plan.planId);
+/** First run: writes the merchant entity. Plans are created by the merchant on the Products page. */
+export async function setupMerchant(input: MerchantInput): Promise<{ merchant: MerchantDTO }> {
+  if (await getMerchant(input.merchantId)) {
+    throw new SintingaleError("CONFLICT", `Merchant "${input.merchantId}" already exists. Edit it in Settings instead.`);
   }
-  return { merchant, plansCreated };
+  return { merchant: await upsertMerchant(input) };
 }
 
 /* ----------------------------------------------------------------------------
@@ -139,8 +126,8 @@ export async function createInvoice(input: InvoiceInput, origin?: string, by: In
 
   let projectName: string | undefined;
   if (input.projectId) {
-    if (onchainEnabled && !splitterEnabled) {
-      throw new SintingaleError("NOT_CONFIGURED", "Set NEXT_PUBLIC_SPLITTER_ADDRESS to accept project payments on-chain.");
+    if (!splitterEnabled) {
+      throw new SintingaleError("NOT_CONFIGURED", "Set NEXT_PUBLIC_SPLITTER_ADDRESS to accept project payments.");
     }
     const { org, project } = await getProjectEntity(input.orgId!, input.projectId);
     if (org.attrs.merchantId !== input.merchantId) throw new SintingaleError("FORBIDDEN", "Project belongs to another merchant.");
@@ -199,7 +186,6 @@ function receiptToRow(r: StoredEntity<"receipt">, invoice?: StoredEntity<"invoic
     txHash: r.attrs.txHash,
     receiptKey: r.key,
     payer: r.attrs.payer,
-    simulated: r.attrs.simulated,
     orgId: r.attrs.orgId,
     projectId: r.attrs.projectId,
     createdBy: invoice?.attrs.createdBy,
@@ -323,7 +309,6 @@ async function merchantIdentity(merchantId: string, merchantPayout: string, orgI
     resolvedAddress: null,
     payout: merchantPayout.toLowerCase(),
     verified: false,
-    demo: false,
     mismatch: false,
   };
   // With Teams & ENS off, checkout never touches ENS: the seller shows as an address.
@@ -334,7 +319,7 @@ async function merchantIdentity(merchantId: string, merchantPayout: string, orgI
   if (!orgId && org.attrs.payout.toLowerCase() !== unverified.payout) return unverified;
   const profile = await getProfile(org.attrs.ensName);
   if (!profile.address) {
-    return { ...unverified, payout: org.attrs.payout.toLowerCase(), ensName: org.attrs.ensName, demo: isDemoName(org.attrs.ensName) };
+    return { ...unverified, payout: org.attrs.payout.toLowerCase(), ensName: org.attrs.ensName };
   }
   const mismatch = profile.address !== org.attrs.payout.toLowerCase();
   return {
@@ -343,7 +328,6 @@ async function merchantIdentity(merchantId: string, merchantPayout: string, orgI
     resolvedAddress: profile.address,
     payout: org.attrs.payout.toLowerCase(),
     verified: !mismatch,
-    demo: profile.demo,
     mismatch,
   };
 }
@@ -354,7 +338,7 @@ async function merchantIdentity(merchantId: string, merchantPayout: string, orgI
 
 async function writeReceiptAndEntitlement(
   invoice: StoredEntity<"invoice">,
-  payment: { txHash: string; payer: string; simulated: boolean },
+  payment: { txHash: string; payer: string },
 ) {
   const ledger = getLedger();
   const paidAt = nowSec();
@@ -372,7 +356,6 @@ async function writeReceiptAndEntitlement(
     amount: invoice.attrs.amount,
     paidAt,
     description: invoice.attrs.description,
-    simulated: payment.simulated,
     orgId: invoice.attrs.orgId,
     projectId: invoice.attrs.projectId,
     grantId: invoice.attrs.grantId,
@@ -399,7 +382,6 @@ export async function recordPayment(input: {
   invoiceKey: string;
   txHash?: string;
   payer?: string;
-  simulated?: boolean;
 }) {
   const ledger = getLedger();
   const invoice = await ledger.get("invoice", input.invoiceKey);
@@ -418,18 +400,7 @@ export async function recordPayment(input: {
 
   if (invoice.attrs.projectId && invoice.attrs.orgId) return recordProjectPayment(invoice, input);
 
-  if (input.simulated || !onchainEnabled) {
-    if (onchainEnabled) {
-      throw new SintingaleError("BAD_REQUEST", "Simulated payments are disabled when on-chain mode is configured.");
-    }
-    const receipt = await writeReceiptAndEntitlement(invoice, {
-      txHash: input.txHash ?? randomHex(32),
-      payer: input.payer ?? randomHex(20),
-      simulated: true,
-    });
-    return { receiptKey: receipt.key, txHash: receipt.attrs.txHash, alreadyRecorded: false };
-  }
-
+  if (!onchainEnabled) throw new SintingaleError("NOT_CONFIGURED", "Payments need NEXT_PUBLIC_PAYMENT_ROUTER_ADDRESS and NEXT_PUBLIC_USDT_ADDRESS.");
   if (!input.txHash) throw new SintingaleError("BAD_REQUEST", "txHash is required.");
   const [dupe] = await ledger.query("receipt", { eq: { txHash: input.txHash.toLowerCase() }, limit: 1 });
   if (dupe) return { receiptKey: dupe.key, txHash: dupe.attrs.txHash, alreadyRecorded: true };
@@ -448,19 +419,17 @@ export async function recordPayment(input: {
   const receipt = await writeReceiptAndEntitlement(invoice, {
     txHash: event.txHash,
     payer: event.payer,
-    simulated: false,
   });
   return { receiptKey: receipt.key, txHash: receipt.attrs.txHash, alreadyRecorded: false };
 }
 
 /**
  * Project invoices: the relayer writes one receipt plus one payout entity per
- * credited account. On-chain, credits come from the splitter's events; in
- * simulated mode they are computed with the exact same integer math.
+ * credited account, taken from the splitter's events in the payment transaction.
  */
 async function recordProjectPayment(
   invoice: StoredEntity<"invoice">,
-  input: { txHash?: string; payer?: string; simulated?: boolean },
+  input: { txHash?: string; payer?: string },
 ) {
   const ledger = getLedger();
   const orgId = invoice.attrs.orgId!;
@@ -468,35 +437,24 @@ async function recordProjectPayment(
   const { org, project } = await getProjectEntity(orgId, projectId);
   if (!project) throw new SintingaleError("NOT_FOUND", "The invoice's project no longer exists.");
 
-  let payment: { txHash: string; payer: string; simulated: boolean; version: number; credits: Array<{ account: string; amount: number; bps: number }> };
-  if (splitterEnabled) {
-    if (!input.txHash) throw new SintingaleError("BAD_REQUEST", "txHash is required.");
-    try {
-      const verified = await verifyProjectPaidTx(input.txHash as Hex, {
-        invoiceId: invoice.attrs.invoiceId,
-        amount: invoice.attrs.amount,
-        onchainProjectId: project.attrs.onchainId,
-      });
-      payment = {
-        txHash: verified.txHash,
-        payer: verified.payer,
-        simulated: false,
-        version: verified.version,
-        credits: verified.credits.map((c) => ({ account: c.account, amount: Number(c.amount), bps: c.bps })),
-      };
-    } catch (err) {
-      console.error("[sintingale] project payment rejected", invoice.attrs.invoiceId, err);
-      throw new SintingaleError("PAYMENT_NOT_VERIFIED", err instanceof Error ? err.message : "Could not verify payment.");
-    }
-  } else {
-    if (onchainEnabled) throw new SintingaleError("NOT_CONFIGURED", "Project payments need the ProjectSplitter.");
+  if (!splitterEnabled) throw new SintingaleError("NOT_CONFIGURED", "Project payments need the ProjectSplitter.");
+  if (!input.txHash) throw new SintingaleError("BAD_REQUEST", "txHash is required.");
+  let payment: { txHash: string; payer: string; version: number; credits: Array<{ account: string; amount: number; bps: number }> };
+  try {
+    const verified = await verifyProjectPaidTx(input.txHash as Hex, {
+      invoiceId: invoice.attrs.invoiceId,
+      amount: invoice.attrs.amount,
+      onchainProjectId: project.attrs.onchainId,
+    });
     payment = {
-      txHash: input.txHash ?? randomHex(32),
-      payer: input.payer ?? randomHex(20),
-      simulated: true,
-      version: project.attrs.version,
-      credits: computeCredits(invoice.attrs.amount, project.attrs.shares, org.attrs.owner),
+      txHash: verified.txHash,
+      payer: verified.payer,
+      version: verified.version,
+      credits: verified.credits.map((c) => ({ account: c.account, amount: Number(c.amount), bps: c.bps })),
     };
+  } catch (err) {
+    console.error("[sintingale] project payment rejected", invoice.attrs.invoiceId, err);
+    throw new SintingaleError("PAYMENT_NOT_VERIFIED", err instanceof Error ? err.message : "Could not verify payment.");
   }
 
   const receipt = await writeReceiptAndEntitlement(invoice, payment);
@@ -520,7 +478,6 @@ async function recordProjectPayment(
         shareBps: c.bps,
         version: payment.version,
         paidAt,
-        simulated: payment.simulated,
       },
       paidAt + 180 * DAY,
     );
@@ -604,46 +561,46 @@ export async function verifyReceipt(receiptKey: string): Promise<VerifyResult> {
     detail: `Expires ${new Date(receipt.expiresAt * 1000).toUTCString()}`,
   });
 
-  if (receipt.simulated) {
+  try {
+    const project =
+      receipt.orgId && receipt.projectId ? (await getProjectEntity(receipt.orgId, receipt.projectId).catch(() => null))?.project : null;
+    const event = project
+      ? await verifyProjectPaidTx(receipt.txHash as Hex, {
+          invoiceId: receipt.invoiceId,
+          amount: receipt.amount,
+          onchainProjectId: project.attrs.onchainId,
+        })
+      : await getMerchant(receipt.merchantId).then((merchant) =>
+          verifyPaidTx(receipt.txHash as Hex, {
+            invoiceId: receipt.invoiceId,
+            amount: receipt.amount,
+            merchant: merchant?.wallet ?? merchant?.payout,
+          }),
+        );
     checks.push({
       id: "onchain",
-      label: "Matching Paid event on Whitechain",
-      status: "skip",
-      detail: "Simulated payment: no on-chain transaction to compare against.",
+      label: project ? "Matching Credited event on Whitechain" : "Matching Paid event on Whitechain",
+      status: "pass",
+      detail: `Block ${event.blockNumber}, invoiceId and amount match`,
     });
-  } else {
-    const merchant = await getMerchant(receipt.merchantId);
-    try {
-      const event = await verifyPaidTx(receipt.txHash as Hex, {
-        invoiceId: receipt.invoiceId,
-        amount: receipt.amount,
-        merchant: merchant?.wallet ?? merchant?.payout,
-      });
-      checks.push({
-        id: "onchain",
-        label: "Matching Paid event on Whitechain",
-        status: "pass",
-        detail: `Block ${event.blockNumber}, invoiceId and amount match`,
-      });
-      const payerOk = event.payer.toLowerCase() === receipt.payer.toLowerCase();
-      checks.push({
-        id: "payer",
-        label: "Payer matches the receipt",
-        status: payerOk ? "pass" : "fail",
-        detail: payerOk ? event.payer : `Chain says ${event.payer}, receipt says ${receipt.payer}`,
-      });
-    } catch (err) {
-      checks.push({
-        id: "onchain",
-        label: "Matching Paid event on Whitechain",
-        status: "fail",
-        detail: err instanceof Error ? err.message : "Could not load the transaction.",
-      });
-    }
+    const payerOk = event.payer.toLowerCase() === receipt.payer.toLowerCase();
+    checks.push({
+      id: "payer",
+      label: "Payer matches the receipt",
+      status: payerOk ? "pass" : "fail",
+      detail: payerOk ? event.payer : `Chain says ${event.payer}, receipt says ${receipt.payer}`,
+    });
+  } catch (err) {
+    checks.push({
+      id: "onchain",
+      label: "Matching payment event on Whitechain",
+      status: "fail",
+      detail: err instanceof Error ? err.message : "Could not load the transaction.",
+    });
   }
 
   const failed = checks.some((c) => c.status === "fail");
-  return { receipt, checks, verdict: failed ? "mismatch" : receipt.simulated ? "simulated" : "verified" };
+  return { receipt, checks, verdict: failed ? "mismatch" : "verified" };
 }
 
 /* ----------------------------------------------------------------------------

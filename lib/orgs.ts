@@ -1,11 +1,8 @@
 import "server-only";
-import { randomBytes } from "node:crypto";
-import type { Hex } from "viem";
 import { SintingaleError } from "./api";
 import { acceptorOf, filterValid, isRelayerEntity, isValidOrg, signerOf } from "./arkiv/trust";
 import { projectIdToBytes32 } from "./chain/splitter";
 import { publicConfig, serverConfig, splitterEnabled } from "./config";
-import { isDemoName } from "./demo";
 import { verifyControl } from "./ens/ownership";
 import { getProfile, resolveName } from "./ens/resolve";
 import { isSubnameOf, subnameInstructions } from "./ens/subnames";
@@ -46,7 +43,6 @@ const toOrg = async (o: StoredEntity<"org">): Promise<OrgDTO> => {
     avatar: profile.avatar,
     resolvedAddress: profile.address,
     payoutMatches: profile.address === lc(o.attrs.payout),
-    demo: profile.demo,
   };
 };
 
@@ -98,9 +94,6 @@ async function assertSignedBy(type: Parameters<typeof signerOf>[0], attrs: never
 export async function createOrg(attrs: OrgAttrs, sessionAddress: string): Promise<OrgDTO> {
   if (lc(attrs.owner) !== lc(sessionAddress)) {
     throw new SintingaleError("FORBIDDEN", "Sign in with the wallet that controls this name.");
-  }
-  if (isDemoName(attrs.ensName) && getLedger().backend !== "memory") {
-    throw new SintingaleError("BAD_REQUEST", ".demo names only exist on the local demo ledger.");
   }
   const control = await verifyControl(attrs.ensName, attrs.owner, { fresh: true });
   if (!control.ok) {
@@ -176,8 +169,8 @@ export async function saveProject(attrs: ProjectAttrs, sessionAddress: string): 
   if (attrs.shares.length) {
     const err = validateShares(attrs.shares.map((s) => ({ account: s.account, bps: s.bps })));
     if (err) throw new SintingaleError("BAD_REQUEST", `Invalid share table (${err}). Shares must total exactly 100%.`);
-    const expectedContract = splitterEnabled ? lc(publicConfig.splitter!) : "simulated";
-    if (lc(attrs.splitContract) !== expectedContract) {
+    if (!splitterEnabled) throw new SintingaleError("NOT_CONFIGURED", "Set NEXT_PUBLIC_SPLITTER_ADDRESS to use project splits.");
+    if (lc(attrs.splitContract) !== lc(publicConfig.splitter!)) {
       throw new SintingaleError("BAD_REQUEST", "splitContract does not match the configured splitter.");
     }
     for (const s of attrs.shares) {
@@ -229,7 +222,7 @@ export async function listMembers(orgId: string): Promise<MemberDTO[]> {
   return Promise.all(
     members.map(async (m) => {
       const current = await resolveName(m.attrs.subname);
-      return { ...m.attrs, key: m.key, currentAddress: current, addressMatches: current === lc(m.attrs.address), demo: isDemoName(m.attrs.subname) };
+      return { ...m.attrs, key: m.key, currentAddress: current, addressMatches: current === lc(m.attrs.address) };
     }),
   );
 }
@@ -257,7 +250,7 @@ export async function approveMember(attrs: MemberAttrs, sessionAddress: string):
   }
   const entity = await getLedger().create("member", attrs, nowSec() + LONG);
   const current = await resolveName(attrs.subname);
-  return { ...entity.attrs, key: entity.key, currentAddress: current, addressMatches: true, demo: isDemoName(attrs.subname) };
+  return { ...entity.attrs, key: entity.key, currentAddress: current, addressMatches: true };
 }
 
 export async function revoke(attrs: RevocationAttrs, sessionAddress: string) {
@@ -398,14 +391,11 @@ export async function listPayouts(orgId: string, projectId?: string): Promise<Pa
 export async function claimableFor(account: string): Promise<ClaimableDTO[]> {
   const me = lc(account);
   const relayer = relayerAddress();
-  const [payouts, claims] = await Promise.all([
-    getLedger().query("payout", { eq: { account: me }, creator: relayer }),
-    getLedger().query("claim", { eq: { account: me }, creator: relayer }),
-  ]);
-  const groups = new Map<string, { orgId: string; projectId: string; credited: number; simulated: boolean; payouts: PayoutDTO[] }>();
+  const payouts = await getLedger().query("payout", { eq: { account: me }, creator: relayer });
+  const groups = new Map<string, { orgId: string; projectId: string; credited: number; payouts: PayoutDTO[] }>();
   for (const p of payouts) {
     const k = `${p.attrs.orgId}:${p.attrs.projectId}`;
-    const g = groups.get(k) ?? { orgId: p.attrs.orgId, projectId: p.attrs.projectId, credited: 0, simulated: p.attrs.simulated, payouts: [] };
+    const g = groups.get(k) ?? { orgId: p.attrs.orgId, projectId: p.attrs.projectId, credited: 0, payouts: [] };
     g.credited += p.attrs.amount;
     g.payouts.push(toPayout(p));
     groups.set(k, g);
@@ -413,38 +403,20 @@ export async function claimableFor(account: string): Promise<ClaimableDTO[]> {
   const out: ClaimableDTO[] = [];
   for (const g of groups.values()) {
     const project = await getProject(g.orgId, g.projectId).catch(() => null);
-    const claimed = claims.filter((c) => c.attrs.orgId === g.orgId && c.attrs.projectId === g.projectId).reduce((s, c) => s + c.attrs.amount, 0);
-    let claimable = Math.max(0, g.credited - claimed);
-    let source: ClaimableDTO["source"] = "ledger";
-    if (!g.simulated && project && project.splitContract.startsWith("0x")) {
-      claimable = Number(await readClaimable(project.onchainId, me).catch(() => 0n));
-      source = "chain";
-    }
+    const onchainId = project?.onchainId ?? projectIdToBytes32(g.orgId, g.projectId);
+    const claimable = Number(await readClaimable(onchainId, me).catch(() => 0n));
+    const claimed = Math.max(0, g.credited - claimable);
     out.push({
       orgId: g.orgId,
       projectId: g.projectId,
       projectName: project?.name ?? g.projectId,
-      onchainId: project?.onchainId ?? projectIdToBytes32(g.orgId, g.projectId),
+      onchainId,
       credited: g.credited,
       claimed,
       claimable,
-      source,
       payouts: g.payouts.sort((a, b) => b.paidAt - a.paidAt),
     });
   }
   return out;
 }
 
-/** Simulated-mode claim. With the splitter configured, members claim on-chain from their own wallet. */
-export async function recordSimulatedClaim(account: string, orgId: string, projectId: string) {
-  if (splitterEnabled) throw new SintingaleError("BAD_REQUEST", "Claims go through the ProjectSplitter contract.");
-  const entry = (await claimableFor(account)).find((c) => c.orgId === orgId && c.projectId === projectId);
-  if (!entry || entry.claimable <= 0) throw new SintingaleError("BAD_REQUEST", "Nothing to claim.");
-  const txHash = `0x${randomBytes(32).toString("hex")}` as Hex;
-  await getLedger().create(
-    "claim",
-    { orgId, projectId, account: lc(account), amount: entry.claimable, claimedAt: nowSec(), txHash },
-    nowSec() + 180 * DAY,
-  );
-  return { amount: entry.claimable, txHash };
-}

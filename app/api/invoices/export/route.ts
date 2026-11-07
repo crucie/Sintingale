@@ -17,7 +17,6 @@ const HEADER = [
   "tx_hash",
   "tx_url",
   "arkiv_receipt_key",
-  "simulated",
 ];
 
 const cell = (v: unknown) => {
@@ -43,9 +42,8 @@ export async function GET(request: Request) {
         "USDT",
         `Whitechain Sepolia (${publicConfig.whitechain.chainId})`,
         r.txHash,
-        r.txHash && !r.simulated ? explorerTx(r.txHash) : "",
+        r.txHash ? explorerTx(r.txHash) : "",
         r.receiptKey,
-        r.simulated ? "yes" : "no",
       ]
         .map(cell)
         .join(","),

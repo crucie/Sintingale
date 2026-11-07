@@ -1,5 +1,4 @@
 import "server-only";
-import { isDemoName } from "../demo";
 import { getTextRecord, invalidateEns, normalizeName, resolveName } from "./resolve";
 
 /** Text record a name manager sets to vouch for a wallet that is not the name's address. */
@@ -8,7 +7,7 @@ export const ORG_TEXT_KEY = "sintingale.org";
 
 export interface ControlCheck {
   ok: boolean;
-  method: "addr" | "text" | "demo" | null;
+  method: "addr" | "text" | null;
   name: string;
   resolvedAddress: string | null;
   textRecord: string | null;
@@ -31,7 +30,7 @@ export async function verifyControl(rawName: string, wallet: string, opts: { fre
   const [resolvedAddress, textRecord] = await Promise.all([resolveName(name), getTextRecord(name, OWNER_TEXT_KEY)]);
 
   if (resolvedAddress === w) {
-    return { ok: true, method: isDemoName(name) ? "demo" : "addr", name, resolvedAddress, textRecord };
+    return { ok: true, method: "addr", name, resolvedAddress, textRecord };
   }
   if (textRecord && textRecord.trim().toLowerCase() === w) {
     return { ok: true, method: "text", name, resolvedAddress, textRecord };

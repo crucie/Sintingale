@@ -12,8 +12,8 @@ export async function POST(request: Request) {
     rateLimit(request, "siwe", 20);
     const { message, signature } = body.parse(await readJson(request));
     const address = await verifySiwe(message, signature, request.headers.get("host") ?? "");
-    (await cookies()).set(SESSION_COOKIE, encodeSession({ address, demo: false }), sessionCookieOptions);
-    return json({ address, demo: false, org: await getOrgForOwner(address) });
+    (await cookies()).set(SESSION_COOKIE, encodeSession({ address }), sessionCookieOptions);
+    return json({ address, org: await getOrgForOwner(address) });
   } catch (err) {
     return errorResponse(err);
   }

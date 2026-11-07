@@ -1,6 +1,4 @@
 import { publicConfig } from "../config";
-import { isDemoName } from "../demo";
-
 export const subnameOf = (label: string, parent: string) => `${label.toLowerCase()}.${parent.toLowerCase()}`;
 
 export const isSubnameOf = (name: string, parent: string) => {
@@ -15,8 +13,7 @@ export interface SubnameInstructions {
   name: string;
   parent: string;
   address: string;
-  ensAppUrl: string | null;
-  demo: boolean;
+  ensAppUrl: string;
   steps: string[];
 }
 
@@ -27,15 +24,11 @@ export interface SubnameInstructions {
  */
 export function subnameInstructions(label: string, parent: string, address: string): SubnameInstructions {
   const name = subnameOf(label, parent);
-  if (isDemoName(parent)) {
-    return { name, parent, address, ensAppUrl: null, demo: true, steps: ["Demo org: the subname is issued in the local demo registry."] };
-  }
   return {
     name,
     parent,
     address,
     ensAppUrl: `${publicConfig.sepolia.ensAppUrl}/${parent}?tab=subnames`,
-    demo: false,
     steps: [
       `Open ${parent} in the ENS app on Sepolia and choose "New subname".`,
       `Create the label "${label}" and keep it unlocked (do not burn any fuses).`,

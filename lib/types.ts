@@ -15,7 +15,6 @@ export interface OrgDTO extends OrgAttrs {
   /** Live resolution of the ENS name right now. */
   resolvedAddress: string | null;
   payoutMatches: boolean;
-  demo: boolean;
 }
 
 export interface ProjectDTO extends ProjectAttrs {
@@ -27,15 +26,13 @@ export interface MemberDTO extends MemberAttrs {
   key: string;
   currentAddress: string | null;
   addressMatches: boolean;
-  demo: boolean;
 }
 
 export interface SubnameInstructionsDTO {
   name: string;
   parent: string;
   address: string;
-  ensAppUrl: string | null;
-  demo: boolean;
+  ensAppUrl: string;
   steps: string[];
 }
 
@@ -67,13 +64,11 @@ export interface ClaimableDTO {
   credited: number;
   claimed: number;
   claimable: number;
-  source: "chain" | "ledger";
   payouts: PayoutDTO[];
 }
 
 export interface SessionDTO {
   address: string;
-  demo: boolean;
   org: OrgDTO | null;
 }
 
@@ -84,7 +79,6 @@ export interface MerchantIdentity {
   resolvedAddress: string | null;
   payout: string;
   verified: boolean;
-  demo: boolean;
   mismatch: boolean;
 }
 
@@ -117,7 +111,6 @@ export interface InvoiceRow {
   txHash?: string;
   receiptKey?: string;
   payer?: string;
-  simulated?: boolean;
   orgId?: string;
   projectId?: string;
   createdBy?: string;
@@ -144,7 +137,8 @@ export interface ReceiptDTO {
   amount: number;
   paidAt: number;
   description: string;
-  simulated: boolean;
+  orgId?: string;
+  projectId?: string;
   creator: string;
   expiresAt: number;
 }
@@ -161,7 +155,7 @@ export interface VerifyCheck {
 export interface VerifyResult {
   receipt: ReceiptDTO;
   checks: VerifyCheck[];
-  verdict: "verified" | "simulated" | "mismatch";
+  verdict: "verified" | "mismatch";
 }
 
 export interface DashboardStats {
@@ -181,7 +175,7 @@ export interface AccessResult {
 }
 
 export interface SystemInfo {
-  ledger: "memory" | "arkiv";
+  ledger: "arkiv";
   relayer: string;
   onchain: boolean;
 }

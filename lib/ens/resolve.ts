@@ -1,9 +1,7 @@
 import "server-only";
 import { getAddress } from "viem";
 import { normalize } from "viem/ens";
-import { isDemoName } from "../demo";
 import { sepoliaClient } from "./client";
-import { demoResolve } from "./demo-registry";
 
 const TTL_MS = 5 * 60_000;
 const TIMEOUT_MS = 5_000;
@@ -41,7 +39,6 @@ export function normalizeName(name: string): string | null {
 export async function resolveName(name: string): Promise<string | null> {
   const n = normalizeName(name);
   if (!n) return null;
-  if (isDemoName(n)) return demoResolve(n);
   const addr = await cached(`addr:${n}`, () => sepoliaClient.getEnsAddress({ name: n }), null);
   return addr ? addr.toLowerCase() : null;
 }
@@ -52,13 +49,13 @@ export async function reverseLookup(address: string): Promise<string | null> {
 
 export async function getAvatar(name: string): Promise<string | null> {
   const n = normalizeName(name);
-  if (!n || isDemoName(n)) return null;
+  if (!n) return null;
   return cached(`avatar:${n}`, () => sepoliaClient.getEnsAvatar({ name: n }), null);
 }
 
 export async function getTextRecord(name: string, key: string): Promise<string | null> {
   const n = normalizeName(name);
-  if (!n || isDemoName(n)) return null;
+  if (!n) return null;
   return cached(`text:${key}:${n}`, () => sepoliaClient.getEnsText({ name: n, key }), null);
 }
 
@@ -66,10 +63,9 @@ export interface EnsProfile {
   name: string;
   address: string | null;
   avatar: string | null;
-  demo: boolean;
 }
 
 export async function getProfile(name: string): Promise<EnsProfile> {
   const [address, avatar] = await Promise.all([resolveName(name), getAvatar(name)]);
-  return { name: name.toLowerCase(), address, avatar, demo: isDemoName(name) };
+  return { name: name.toLowerCase(), address, avatar };
 }

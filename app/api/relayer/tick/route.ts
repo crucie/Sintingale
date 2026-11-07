@@ -11,7 +11,8 @@ export async function GET(request: Request) {
   await connection();
   try {
     const secret = process.env.CRON_SECRET;
-    if (secret && request.headers.get("authorization") !== `Bearer ${secret}`) {
+    if (!secret) throw new SintingaleError("NOT_CONFIGURED", "Set CRON_SECRET to enable the relayer backstop.");
+    if (request.headers.get("authorization") !== `Bearer ${secret}`) {
       throw new SintingaleError("UNAUTHORIZED", "Invalid cron secret.");
     }
     if (!onchainEnabled) {

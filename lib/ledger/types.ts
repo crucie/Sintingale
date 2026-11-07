@@ -22,7 +22,7 @@ export interface QueryFilter<T extends EntityType> {
 }
 
 export interface Ledger {
-  readonly backend: "memory" | "arkiv";
+  readonly backend: "arkiv";
   readonly writer: string;
   create<T extends EntityType>(type: T, attrs: AttrsByType[T], expiresAt: number): Promise<StoredEntity<T>>;
   get<T extends EntityType>(type: T, key: string): Promise<StoredEntity<T> | null>;

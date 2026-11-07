@@ -10,20 +10,23 @@ import { NonceStore } from "./nonce";
 export const SESSION_COOKIE = "sn_session";
 const SESSION_TTL_SEC = 12 * 3600;
 
+function sessionSecret(): string {
+  const secret = serverConfig().sessionSecret;
+  if (secret.length < 32) throw new SintingaleError("NOT_CONFIGURED", "SESSION_SECRET must be set to at least 32 characters.");
+  return secret;
+}
+
 const globalStore = globalThis as unknown as { __sintingaleNonces?: NonceStore };
-const nonces = () =>
-  (globalStore.__sintingaleNonces ??= new NonceStore(serverConfig().sessionSecret, serverConfig().nonceTtlSec));
+const nonces = () => (globalStore.__sintingaleNonces ??= new NonceStore(sessionSecret(), serverConfig().nonceTtlSec));
 
 export const issueNonce = () => nonces().issue();
 
 export interface Session {
   address: string;
-  /** Demo identities are only available on the local ledger. */
-  demo: boolean;
   exp: number;
 }
 
-const sign = (payload: string) => createHmac("sha256", serverConfig().sessionSecret).update(payload).digest("base64url");
+const sign = (payload: string) => createHmac("sha256", sessionSecret()).update(payload).digest("base64url");
 
 export function encodeSession(s: Omit<Session, "exp">): string {
   const payload = Buffer.from(

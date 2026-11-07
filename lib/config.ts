@@ -5,7 +5,7 @@ const address = (v: string | undefined) => (isAddress(v) ? v : undefined);
 
 export const publicConfig = {
   appUrl: process.env.NEXT_PUBLIC_APP_URL || "",
-  merchantId: process.env.NEXT_PUBLIC_DEMO_MERCHANT_ID || "m_demo",
+  merchantId: process.env.NEXT_PUBLIC_MERCHANT_ID || "m_sintingale",
   whitechain: {
     chainId: Number(process.env.NEXT_PUBLIC_WHITECHAIN_CHAIN_ID || 1874),
     rpcUrl: process.env.NEXT_PUBLIC_WHITECHAIN_RPC_URL || "https://rpc.testnet.whitechain.io",
@@ -26,28 +26,38 @@ export const publicConfig = {
   },
 } as const;
 
-/** On-chain mode needs both contract addresses; otherwise checkout runs a labelled simulation. */
+/** Checkout needs the PaymentRouter and the USDT token; without them payments are refused, never simulated. */
 export const onchainEnabled = Boolean(publicConfig.paymentRouter && publicConfig.usdt.address);
 
-/** Project invoices settle through the ProjectSplitter when it is configured. */
+/** Project invoices settle through the ProjectSplitter; without it they cannot be created. */
 export const splitterEnabled = Boolean(publicConfig.splitter && publicConfig.usdt.address);
 
 /** Server-only configuration. Never import this from a client component. */
 export function serverConfig() {
   return {
-    relayerPrivateKey: (process.env.RELAYER_PRIVATE_KEY || undefined) as `0x${string}` | undefined,
-    relayerAddress: address(process.env.RELAYER_ADDRESS),
-    arkivPrivateKey: (process.env.ARKIV_PRIVATE_KEY || process.env.RELAYER_PRIVATE_KEY || undefined) as `0x${string}` | undefined,
-    arkivEnabled: process.env.ARKIV_ENABLED === "true",
+    arkivPrivateKey: (process.env.ARKIV_PRIVATE_KEY || undefined) as `0x${string}` | undefined,
     arkivAccessKey: process.env.ARKIV_ACCESS_KEY || "",
-    apiKey: process.env.SINTINGALE_API_KEY || "sn_test_demo_key",
+    apiKey: process.env.SINTINGALE_API_KEY || "",
     invoiceGraceSec: Number(process.env.INVOICE_GRACE_SEC || 120),
     confirmations: Number(process.env.RELAYER_CONFIRMATIONS || 1),
     splitterAllowedToken: address(process.env.SPLITTER_ALLOWED_TOKEN) ?? address(process.env.NEXT_PUBLIC_USDT_ADDRESS),
-    sessionSecret: process.env.SESSION_SECRET || "sintingale-dev-session-secret-change-me",
+    sessionSecret: process.env.SESSION_SECRET || "",
     siweDomain: process.env.SIWE_DOMAIN || "",
     nonceTtlSec: Number(process.env.NONCE_TTL_SECONDS || 300),
     inviteTtlSec: Number(process.env.INVITE_TTL_SECONDS || 48 * 3600),
-    demoIdentities: process.env.DEMO_IDENTITIES !== "false",
   };
+}
+
+/** Names of required variables that are missing or malformed. Empty means the deployment can serve traffic. */
+export function missingConfig(): string[] {
+  const cfg = serverConfig();
+  const missing: string[] = [];
+  if (!/^0x[0-9a-fA-F]{64}$/.test(cfg.arkivPrivateKey ?? "")) missing.push("ARKIV_PRIVATE_KEY");
+  if (!cfg.arkivAccessKey) missing.push("ARKIV_ACCESS_KEY");
+  if (cfg.apiKey.length < 16) missing.push("SINTINGALE_API_KEY (16+ characters)");
+  if (cfg.sessionSecret.length < 32) missing.push("SESSION_SECRET (32+ characters)");
+  if (!publicConfig.paymentRouter) missing.push("NEXT_PUBLIC_PAYMENT_ROUTER_ADDRESS");
+  if (!publicConfig.usdt.address) missing.push("NEXT_PUBLIC_USDT_ADDRESS");
+  if (!publicConfig.appUrl) missing.push("NEXT_PUBLIC_APP_URL");
+  return missing;
 }
