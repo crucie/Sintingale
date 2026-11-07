@@ -4,20 +4,47 @@ Stripe-style billing for SaaS, settled in USDT. **Money moves on Whitechain. Sta
 
 Merchants create plans and checkout links. Customers pay USDT on Whitechain through a non-custodial
 `PaymentRouter`. Every invoice, receipt and entitlement is an attribute-indexed, self-expiring entity on Arkiv.
-A SaaS backend checks access with one query. Built from scratch at ETHGlobal Mumbai (5–7 November 2026).
+A SaaS backend checks access with one query.
+
+**Built from scratch at ETHGlobal Mumbai (5–7 November 2026).** The first commit is
+[`Add project specification`](https://github.com/crucie/Sintingale/commits/main) on 5 November 2026, 18:04 IST.
+The [commit history](https://github.com/crucie/Sintingale/commits/main) and pull requests
+[#1–#10](https://github.com/crucie/Sintingale/pulls?q=is%3Apr) show the build step by step.
+
+**Tracks:** Whitechain *Operate · Stablecoin Payments for Business* and Arkiv *Build on Arkiv (from scratch)*.
 
 ## Submission at a glance
 
 | | |
 |---|---|
+| Hosted app (no login) | [sintingale.vercel.app](https://sintingale.vercel.app): merchant at `/dashboard`, customer at `/pay/<key>`, SaaS app at `/demo` |
+| Demo video | TODO link (2–4 min: merchant, customer, SaaS backend) |
 | `PaymentRouter` (Whitechain Sepolia, verified) | [`0x0d72fafa591e6e5d83db0d6ac6162e38f17c333b`](https://explorer.testnet.whitechain.io/address/0x0d72fafa591e6e5d83db0d6ac6162e38f17c333b) |
 | `ProjectSplitter` (Whitechain Sepolia, verified) | [`0xb9e1754493a3f02a60266e486a1ffc7f39042ef6`](https://explorer.testnet.whitechain.io/address/0xb9e1754493a3f02a60266e486a1ffc7f39042ef6) |
-| USDT used | [`0xcedfB56113143d55b2358b8CFbB0dEB5Ad2f55a7`](https://explorer.testnet.whitechain.io/token/0xcedfB56113143d55b2358b8CFbB0dEB5Ad2f55a7) |
+| USDT used | [`0xcedfB56113143d55b2358b8CFbB0dEB5Ad2f55a7`](https://explorer.testnet.whitechain.io/token/0xcedfB56113143d55b2358b8CFbB0dEB5Ad2f55a7) (official test USDT, not self-minted) |
 | USDT payment settled in the main flow | TODO `https://explorer.testnet.whitechain.io/tx/0x…` |
-| Arkiv writer wallet (Rabdi) | TODO `0x…` (the `ARKIV_PRIVATE_KEY` address, shown in Dashboard → Settings → Network) |
-| Arkiv query to run | `node scripts/arkiv-query.mjs receipt merchantId=m_demo --creator <writer>` ([more](./arkiv/schema.md#queries-you-can-run)) |
-| Demo video | TODO link |
-| Hosted app | TODO link |
+| Arkiv network | Rabdi testnet, chain `7794095`, [explorer](https://rabdi.explorer.arkiv.network) |
+| Wallet that wrote our Arkiv entities | [`0xf9277DD2A25085F868796073A9BF8c0d37F6bb06`](https://rabdi.explorer.arkiv.network/address/0xf9277DD2A25085F868796073A9BF8c0d37F6bb06) (also shown in Dashboard → Settings → Network) |
+| Arkiv query to run | See [below](#arkiv-query-you-can-run) |
+
+### Arkiv query you can run
+
+No app server is involved: this reads straight from Rabdi.
+
+```bash
+npm install
+node scripts/arkiv-query.mjs plan merchantId=m_demo --creator 0xf9277DD2A25085F868796073A9BF8c0d37F6bb06
+```
+
+It prints the raw query, so you can also send it through JSON-RPC `arkiv_query`:
+
+```
+arkiv.schema = str('sintingale.plan') AND merchantId = str('m_demo') AND $creator = addr(0xf9277DD2A25085F868796073A9BF8c0d37F6bb06)
+```
+
+Swap `plan` for `receipt`, `invoice` or `entitlement`. The access check behind `hasAccess()` is
+`entitlement merchantId=m_demo planId=pro customer=0x… "periodEnd>now" --creator 0xf927…bb06`.
+More queries are in [`arkiv/schema.md`](./arkiv/schema.md#queries-you-can-run).
 
 **Why this needs onchain stablecoin settlement on Whitechain:**
 - The customer's USDT lands in the merchant's own wallet in the same transaction that emits a public `Paid` event
@@ -28,10 +55,43 @@ A SaaS backend checks access with one query. Built from scratch at ETHGlobal Mum
   the merchant a private processor record that a third party can't check.
 - It also can't take a cross-border payment from a wallet or an AI agent in seconds.
 
-Sponsor docs: [`WHITECHAIN_FEEDBACK.md`](./WHITECHAIN_FEEDBACK.md) ·
-[`arkiv/schema.md`](./arkiv/schema.md) · [`arkiv/friction.md`](./arkiv/friction.md) ·
-[`arkiv/reach.md`](./arkiv/reach.md) · [`arkiv/why-arkiv.md`](./arkiv/why-arkiv.md) ·
-[`arkiv/how-you-use-arkiv.md`](./arkiv/how-you-use-arkiv.md)
+## Prize requirements
+
+### Whitechain: Operate · Stablecoin Payments for Business
+
+| Requirement | Where |
+|---|---|
+| Contracts on Whitechain Sepolia (1874), verified on the explorer | [`PaymentRouter`](https://explorer.testnet.whitechain.io/address/0x0d72fafa591e6e5d83db0d6ac6162e38f17c333b), [`ProjectSplitter`](https://explorer.testnet.whitechain.io/address/0xb9e1754493a3f02a60266e486a1ffc7f39042ef6), both verified |
+| A USDT (`0xcedf…f55a7`) payment settled in the main flow, with the explorer link | TODO tx link in the table above |
+| Why this needs onchain stablecoin settlement on Whitechain | [Above](#submission-at-a-glance) |
+| Public repo with steady progress; README covers setup, architecture and limitations | [Commits](https://github.com/crucie/Sintingale/commits/main) · [Setup](#setup) · [Architecture](#architecture) · [Limitations](#current-limitations) |
+| Demo video, 2–4 min, showing each party | TODO link |
+| `WHITECHAIN_FEEDBACK.md` | [`WHITECHAIN_FEEDBACK.md`](./WHITECHAIN_FEEDBACK.md) |
+
+What the track asks to see:
+
+- **A drop-in piece a separate app adds in about 20 lines:** the `Sintingale` SDK, see
+  [Integrate in 20 lines](#integrate-in-20-lines). `/demo` is that separate app.
+- **Both views:**
+  - the merchant: `/dashboard` for plans, invoices, revenue and settings;
+  - the paying customer: `/pay/<invoiceKey>`, then `/receipt/<receiptKey>`.
+- **Past the first payment:**
+  - **renewals:** each payment writes an entitlement that expires at the end of the billing period. Access then lapses
+    by itself, and paying a new invoice for the plan renews it. The 5-minute `flash` plan shows this live;
+  - **an accountant export:** *Export CSV* on the invoices page (`GET /api/invoices/export`) lists every paid invoice with amount, payer, tx hash, explorer link and Arkiv receipt key.
+- **Not a plain transfer:** `PaymentRouter.payInvoice` binds each payment to an invoice id, refuses double payment,
+  and emits a `Paid` event the relayer checks against the Arkiv invoice.
+
+### Arkiv: Build on Arkiv (from scratch)
+
+| Requirement | Where |
+|---|---|
+| Built from scratch at ETHGlobal Mumbai | First commit 5 Nov 2026, [history](https://github.com/crucie/Sintingale/commits/main) |
+| Writes to Rabdi with `@arkiv-network/sdk`; a feature users see reads from Arkiv | [`lib/ledger/arkiv.ts`](./lib/ledger/arkiv.ts). Users see Arkiv data in five places: checkout (invoice), receipt page (receipt + `$creator`), `/demo` paywall and `GET /api/access` (entitlement), dashboard (invoices, receipts, stats), products (plans) |
+| Writer wallet and one query in the README | [Above](#submission-at-a-glance) |
+| `/arkiv/schema.md`, `/arkiv/friction.md` | [`schema.md`](./arkiv/schema.md) · [`friction.md`](./arkiv/friction.md) |
+| One file per judging criterion | [`friction.md`](./arkiv/friction.md) · [`reach.md`](./arkiv/reach.md) · [`why-arkiv.md`](./arkiv/why-arkiv.md) · [`how-you-use-arkiv.md`](./arkiv/how-you-use-arkiv.md) |
+| Open-source license; how we used AI | [MIT](./LICENSE) · [How we used AI](#how-we-used-ai) |
 
 ## Architecture
 
@@ -91,7 +151,9 @@ node --env-file=.env scripts/deploy.mjs   # deploys PaymentRouter + ProjectSplit
 # run the two `forge verify-contract … --verifier blockscout` commands it prints, from contracts/
 ```
 
-Put the printed addresses in `.env`, set `ARKIV_ENABLED=true`, then run `npm run dev` and:
+Put the printed addresses in `.env`, set `ARKIV_ENABLED=true`, then run `npm run dev` and follow the steps below.
+On the shared Rabdi ledger, the `m_demo` merchant and its plans already exist, so step 1 shows the profile form
+instead of setup.
 
 1. **Merchant: create the merchant.** Go to Dashboard → Settings and connect the merchant wallet. On an empty
    ledger, the form creates the merchant and the demo plans.
@@ -103,6 +165,17 @@ Put the printed addresses in `.env`, set `ARKIV_ENABLED=true`, then run `npm run
 5. **Check the result.** The receipt page shows "verified". `/demo` unlocks for the paying wallet, and so does
    `GET /api/access`.
 
+### Hosting on Vercel
+
+1. Import the repo at [vercel.com/new](https://vercel.com/new). Vercel detects Next.js; keep the defaults.
+2. Add the environment variables before the first deploy:
+   - **Required:** every `NEXT_PUBLIC_*` value from `.env.example`, plus `ARKIV_ENABLED=true`, `ARKIV_ACCESS_KEY`,
+     `ARKIV_PRIVATE_KEY`, `SESSION_SECRET`, `SINTINGALE_API_KEY` and `SPLITTER_ALLOWED_TOKEN`.
+   - **Your URL:** set `NEXT_PUBLIC_APP_URL` and `SIWE_DOMAIN` to the deployment URL.
+   - **Leave out** `DEPLOYER_PRIVATE_KEY`.
+3. Use Arkiv mode when hosted. Serverless instances don't share memory, so the in-memory ledger can't work across them.
+4. Redeploy after changing any `NEXT_PUBLIC_*` value. They are built into the app at build time.
+
 ## Routes
 
 | Route | Purpose |
@@ -110,7 +183,7 @@ Put the printed addresses in `.env`, set `ARKIV_ENABLED=true`, then run `npm run
 | `/` | Landing page |
 | `/dashboard` | Revenue, paid/pending counts, active entitlements, recent activity |
 | `/dashboard/products` | Create and list plans, with a live checkout preview |
-| `/dashboard/invoices` | Paid / pending / expired invoices |
+| `/dashboard/invoices` | Paid / pending / expired invoices, with *Export CSV* for the accountant |
 | `/dashboard/invoices/new` | Create an invoice, get a link and QR code |
 | `/dashboard/settings` | Merchant setup and profile, payout registration, API key, network info |
 | `/pay/[invoiceKey]` | Mobile-first customer checkout |
@@ -131,6 +204,7 @@ Put the printed addresses in `.env`, set `ARKIV_ENABLED=true`, then run `npm run
 | `GET/POST` | `/api/merchants` | Dashboard or API key |
 | `GET/POST` | `/api/plans` | Dashboard or API key |
 | `GET/POST` | `/api/invoices` | Dashboard or API key |
+| `GET` | `/api/invoices/export?merchantId=` | Dashboard or API key. CSV of paid invoices for accounting |
 | `GET` | `/api/invoices/:key` | Public |
 | `POST` | `/api/payments/notify` | Public, rate-limited |
 | `GET` | `/api/access?merchantId=&planId=&customer=` | API key (`x-api-key`) |
@@ -151,12 +225,34 @@ All Teams & ENS routes return `403 FEATURE_DISABLED` until the feature is turned
 
 Errors use `{ "error": { "code": "INVOICE_EXPIRED", "message": "…" } }`.
 
-```ts
-import { Sintingale } from "@/lib/sdk";
+## Integrate in 20 lines
 
-const gp = new Sintingale({ baseUrl: "https://sintingale.app", apiKey: process.env.SINTINGALE_API_KEY! });
-const active = await gp.hasAccess({ merchantId: "m_demo", planId: "pro", customer: "0x…" });
+A separate SaaS backend adds Sintingale with the SDK in [`lib/sdk/index.ts`](./lib/sdk/index.ts). It is one file
+with no runtime dependencies: copy it, or call the REST API directly. This is a complete paywall for an Express
+app:
+
+```ts
+import express from "express";
+import { Sintingale } from "./sintingale-sdk";
+
+const app = express();
+const gp = new Sintingale({ baseUrl: "https://sintingale.vercel.app", apiKey: process.env.SINTINGALE_API_KEY! });
+const merchantId = "m_demo";
+
+// Gate: one Arkiv query decides access (entitlement for this wallet and plan, still inside its period).
+app.get("/pro", async (req, res) => {
+  const wallet = String(req.query.wallet);
+  if (await gp.hasAccess({ merchantId, planId: "pro", customer: wallet })) return res.send("Welcome to Pro");
+  // No access yet: create a USDT invoice for this wallet and send the customer to checkout.
+  const { checkoutUrl } = await gp.createInvoice({ merchantId, planId: "pro", customer: wallet, dueInHours: 1 });
+  res.redirect(checkoutUrl);
+});
+
+app.listen(3001);
 ```
+
+After the customer pays on Whitechain, the relayer writes the entitlement to Arkiv, and the same `/pro` request
+lets them in. [`app/demo`](./app/demo) is this flow inside Next.js.
 
 ## Teams & ENS (optional, off by default)
 
@@ -219,18 +315,25 @@ npm run test:contracts   # Foundry: ProjectSplitter (14 tests incl. fuzzed "cred
   Use test data only.
 - **Process memory.** The demo ledger, relayer log cursor and used-nonce set live in process memory. Use Arkiv mode
   for multi-instance hosting.
+- **180-day lifetime cap.** Rabdi's maximum entity lifetime is about 182 days, so every entity is capped at 180.
+  Merchants and plans need a refresh within that window, and a yearly plan's entitlement ends at 180 days.
+- **No refunds or recurring pulls yet.** Renewal means paying a new invoice. `permit`-based pulls and one-click
+  refunds are next.
 
 ## How we used AI
 
-**TODO (team): confirm or edit.** We used AI coding assistants (Cursor's agent) throughout:
+We used AI coding agents in Cursor throughout the hackathon, as ETHGlobal's rules require us to disclose:
 
-- scaffolding UI components and API routes;
-- writing contract tests;
-- the deploy and Arkiv query scripts;
-- reviewing integration details against the Whitechain and Arkiv docs;
-- drafting these docs.
+- **Code:** scaffolding UI components and API routes, the Teams & ENS feature, unit and Foundry tests, the deploy
+  and Arkiv query scripts, the first-run merchant setup and the CSV export.
+- **Debugging:** finding the two Arkiv issues described in [`arkiv/friction.md`](./arkiv/friction.md) by running against
+  the live network.
+- **Research:** checking contract addresses, RPCs and limits against the Whitechain and Arkiv docs, and against the
+  chains themselves.
+- **Docs:** drafting this README, the `arkiv/` files and `WHITECHAIN_FEEDBACK.md`.
 
-Architecture, the data model and product decisions are ours, and every change was reviewed and tested by the team.
+The product idea, architecture, data model and judging-facing claims are ours. Every change was reviewed and run by
+the team before merging, through the pull requests linked above.
 
 ## License
 

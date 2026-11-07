@@ -22,7 +22,7 @@ maps to something a merchant, a customer or a SaaS backend can see. The full ent
 - **What we filter on.** These are the fields a billing system looks things up by: merchant, plan, customer, invoice id,
   tx hash, and "period still running" (`periodEnd > now`). Each indexed attribute in
   [`lib/ledger/arkiv.ts`](../lib/ledger/arkiv.ts) is backed by at least one query in the code. Everything else
-  sits in the non-indexed `data` attribute.
+  sits in the non-indexed `data` attribute, a `bytes` column holding the full record as JSON.
 - **Who can edit.** Only the writer key creates entities, and nothing is updated in place, so a receipt
   can't be altered after it is written. Every receipt is cross-checked against the `Paid` event on Whitechain,
   both by the relayer before writing and by the public receipt page after.
@@ -30,7 +30,7 @@ maps to something a merchant, a customer or a SaaS backend can see. The full ent
   - an invoice is valid until its due date;
   - access lasts for the billing period;
   - a receipt is kept for 180 days (long enough to cover refunds and accounting);
-  - merchant profiles and plans last a year.
+  - merchant profiles and plans last 180 days, Rabdi's longest lifetime, and are re-written whenever they change.
 
 ## What doesn't fit yet
 

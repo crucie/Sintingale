@@ -7,7 +7,7 @@ A merchant's backend asks one question: "is this wallet paid up for this plan ri
 that is a public query any backend can run without Sintingale's server:
 
 ```bash
-node scripts/arkiv-query.mjs entitlement merchantId=m_demo planId=pro customer=0xCUSTOMER "periodEnd>now" --creator 0xWRITER
+node scripts/arkiv-query.mjs entitlement merchantId=m_demo planId=pro customer=0xCUSTOMER "periodEnd>now" --creator 0xf9277DD2A25085F868796073A9BF8c0d37F6bb06
 ```
 
 With Postgres, the only way to get that answer is to call us and believe what comes back. If Sintingale is down, rate

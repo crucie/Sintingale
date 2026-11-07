@@ -2,8 +2,8 @@
 
 SDK `@arkiv-network/sdk` 1.0.1 on Rabdi (chain `7794095`), Node 20.20, Next.js 16, viem 2.x.
 
-> Items 1–5 are things we hit while building. **TODO (team):** add any breakage you saw yourselves
-> under "When something broke", with versions and repro steps.
+> The improvements below come from building. "When something broke" lists the two errors from our first live
+> writes, each with the exact error text and a one-line repro.
 
 ## What should you improve today?
 
@@ -45,8 +45,32 @@ What worked well:
 
 ## When something broke
 
-Template for each item:
+Both of these surfaced only on the first real write to Rabdi. The in-memory ledger we had developed against, and
+TypeScript, accepted the same calls.
 
-- **Expected:**
-- **What happened:** (error text, tx hash, entity key)
-- **How to reproduce:** (command, SDK version, network)
+### 1. A `str` attribute silently caps at 128 bytes
+
+- **Expected:** `str()` to hold a JSON string of a few hundred bytes. The schema docs describe `str` as "a string",
+  and nothing in the types hints at a size limit.
+- **What happened:** the first `createEntity` threw
+  `InvalidValueError: Invalid str value "{"attrs":{"merchantId":"m_demo",…": 239 UTF-8 bytes exceeds the 128-byte
+  limit on a str. Store the long form in a bytes column and keep a short, queryable key here.` The message itself is
+  excellent and told us the fix: we moved the record into a `bytes()` column.
+- **How to reproduce:** SDK 1.0.1, Rabdi. Run
+  `createEntity(defineSchema("t", { data: str() }), { data: str("x".repeat(129)) })`.
+- **Suggestion:** state the 128-byte limit wherever `str` is introduced. A typed hint would be even better, or a
+  `text()` column that maps to `bytes` with UTF-8 encode and decode built in. Storing a JSON document is the most
+  common thing a new user tries.
+
+### 2. A one-year expiry is rejected
+
+- **Expected:** `ExpirationTime.fromSeconds(365 * 86400)` to work. Merchant profiles and plans are long-lived records.
+- **What happened:** `InvalidExpiryError: Invalid expiry: a lifetime of 15768000 blocks is longer than the chain's
+  maximum lifetime of 7884000 blocks (about 182 days). Use ExpirationTime.max() for the longest lifetime allowed.`
+  We now cap every lifetime at 180 days ([`lib/ledger/arkiv.ts`](../lib/ledger/arkiv.ts)). That means a yearly plan's
+  entitlement ends early, and long-lived records need a refresh job.
+- **How to reproduce:** SDK 1.0.1, Rabdi. Run `createEntity(schema, values, { expiration: ExpirationTime.fromSeconds(31536000) })`.
+- **Suggestions:**
+  - Put the maximum lifetime on the Rabdi network page, next to block time.
+  - Export it as a constant (seconds and blocks), so apps can clamp before sending.
+  - Document an "extend" or "renew" pattern for records that should outlive the cap.

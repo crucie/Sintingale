@@ -1,10 +1,10 @@
 # Whitechain feedback
 
-> Drafted from what we hit during setup. **TODO (team):** edit it into your own words and add anything from the
-> test run and the demo.
-
 ## What worked
 
+- Deploying and verifying took minutes. `PaymentRouter` and `ProjectSplitter` deployed with viem, and
+  `forge verify-contract --verifier blockscout` verified both on the first attempt, including the constructor
+  arguments.
 - The [Whitechain Sepolia network page](https://docs.whitechain.io/learn/network/testnet) has everything in one table:
   chain ID, RPC, explorer, faucet, block time and the actual rate limits (50 req/s, burst 500).
 - It really is plain EVM. viem, wagmi and Foundry needed only a chain ID and RPC URL, and our contracts needed no changes.
@@ -20,7 +20,8 @@
   nowhere in the docs. Our first deploy script pointed at the token-list address and would have settled in the
   wrong token.
 - **Getting test USDT.** The faucet only gives WBT (0.5 per day, GitHub account at least 30 days old). We couldn't find a
-  documented way to get the required test USDT. **TODO (team):** how you got it in the end.
+  documented way to get the required test USDT. A short "how to get test USDT for the hackathon" line next to the
+  faucet would have saved us the most time of anything this weekend.
 - **Which RPC is official?** The docs say no third-party endpoint serves chain 1874 yet. The prize page offers a free
   Ankr RPC. We stayed on `rpc.testnet.whitechain.io`.
 

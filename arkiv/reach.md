@@ -27,13 +27,16 @@ wants it for their API".
 
 ## Can they try it today?
 
-- **Hosted demo:** TODO public URL. `/demo` is a paywalled sample app, `/dashboard` is the merchant view.
+- **Hosted demo:** [sintingale.vercel.app](https://sintingale.vercel.app), with no login. `/demo` is a paywalled
+  sample app, `/dashboard` is the merchant view, `/pay/<key>` is the customer checkout.
 - **Locally, with no setup:** `npm install && npm run dev` runs everything in demo mode (in-memory ledger,
   simulated payments).
 - **On testnet:** set the variables in the README to write to Arkiv Rabdi and settle real test USDT on Whitechain
   Sepolia.
-- **Current numbers:** TODO after the test run. For example: entities written, receipts, distinct payer wallets. Get them with
-  `node scripts/arkiv-query.mjs receipt merchantId=m_demo --creator 0xWRITER --limit 100`.
+- **Live on Rabdi now:** the `m_demo` merchant and its 4 plans, written by
+  [`0xf927…bb06`](https://rabdi.explorer.arkiv.network/address/0xf9277DD2A25085F868796073A9BF8c0d37F6bb06).
+  **TODO after the payment run:** receipts, entitlements and distinct payer wallets. Count them with
+  `node scripts/arkiv-query.mjs receipt merchantId=m_demo --creator 0xf9277DD2A25085F868796073A9BF8c0d37F6bb06 --limit 100`.
 
 ## Will we keep building it after Mumbai?
 
