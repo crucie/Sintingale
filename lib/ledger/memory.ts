@@ -12,10 +12,17 @@ const nowSec = () => Math.floor(Date.now() / 1000);
 export class MemoryLedger implements Ledger {
   readonly backend = "memory" as const;
   private entities = new Map<string, StoredEntity>();
+  private ready: Promise<void> = Promise.resolve();
 
   constructor(readonly writer: string) {}
 
+  /** Reads and writes wait for async seeding (the demo org needs signatures). */
+  whenReady(task: Promise<void>) {
+    this.ready = task.catch((err) => console.error("[sintingale] demo seed failed", err));
+  }
+
   async create<T extends EntityType>(type: T, attrs: AttrsByType[T], expiresAt: number): Promise<StoredEntity<T>> {
+    await this.ready;
     const entity: StoredEntity<T> = {
       key: `0x${randomBytes(32).toString("hex")}`,
       type,
@@ -29,6 +36,7 @@ export class MemoryLedger implements Ledger {
   }
 
   async get<T extends EntityType>(type: T, key: string): Promise<StoredEntity<T> | null> {
+    await this.ready;
     const entity = this.entities.get(key.toLowerCase()) ?? this.entities.get(key);
     if (!entity || entity.type !== type) return null;
     if (entity.expiresAt <= nowSec()) {
@@ -39,6 +47,7 @@ export class MemoryLedger implements Ledger {
   }
 
   async query<T extends EntityType>(type: T, filter: QueryFilter<T> = {}): Promise<StoredEntity<T>[]> {
+    await this.ready;
     const now = nowSec();
     const out: StoredEntity<T>[] = [];
     for (const entity of this.entities.values()) {

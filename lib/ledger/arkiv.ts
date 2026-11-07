@@ -14,12 +14,27 @@ import type { Ledger, QueryFilter, StoredEntity } from "./types";
 const INDEXES: Record<EntityType, { str: string[]; num: string[] }> = {
   merchant: { str: ["merchantId", "payout"], num: [] },
   plan: { str: ["merchantId", "planId", "token", "recurrence"], num: ["amount", "intervalSec"] },
-  invoice: { str: ["merchantId", "invoiceId", "planId", "customer", "status"], num: ["amount", "dueAt"] },
+  invoice: {
+    str: ["merchantId", "invoiceId", "planId", "customer", "status", "orgId", "projectId", "createdBy", "grantId"],
+    num: ["amount", "dueAt"],
+  },
   receipt: {
-    str: ["invoiceId", "invoiceKey", "merchantId", "customer", "txHash", "planId"],
+    str: ["invoiceId", "invoiceKey", "merchantId", "customer", "txHash", "planId", "orgId", "projectId", "grantId"],
     num: ["amount", "paidAt"],
   },
   entitlement: { str: ["merchantId", "planId", "customer", "invoiceId"], num: ["periodEnd"] },
+  org: { str: ["orgId", "ensName", "owner", "payout", "merchantId"], num: ["verifiedAt"] },
+  project: { str: ["orgId", "projectId", "splitContract"], num: ["version"] },
+  member: { str: ["orgId", "subname", "address", "role", "kind"], num: ["joinedAt"] },
+  invite: { str: ["orgId", "inviteId", "inviteeAddress", "role"], num: ["createdAt"] },
+  inviteAccept: { str: ["orgId", "inviteId", "acceptor"], num: ["acceptedAt"] },
+  payout: {
+    str: ["orgId", "projectId", "invoiceId", "account", "subname", "txHash"],
+    num: ["amount", "shareBps", "version", "paidAt"],
+  },
+  grant: { str: ["orgId", "grantId", "agentName", "agentAddress", "projectId"], num: ["maxAmount", "maxTotal", "createdAt"] },
+  revocation: { str: ["orgId", "targetType", "targetId"], num: ["revokedAt"] },
+  claim: { str: ["orgId", "projectId", "account", "txHash"], num: ["amount", "claimedAt"] },
 };
 
 const schemas = Object.fromEntries(
@@ -102,7 +117,9 @@ export class ArkivLedger implements Ledger {
     if (nodes.length === 1) builder = builder.where(nodes[0]);
     if (nodes.length > 1) builder = builder.where(and(...(nodes as [Expression, Expression, ...Expression[]])));
     if (creator) builder = builder.createdBy(creator as Hex);
-    const result = await builder.limit(Math.min(limit, 100)).fetch();
+    // Fetch a full page and sort newest-first before applying the caller's limit,
+    // so "latest version" lookups with limit 1 cannot return an older entity.
+    const result = await builder.limit(100).fetch();
 
     const now = nowSec();
     return result.entities
@@ -118,6 +135,7 @@ export class ArkivLedger implements Ledger {
         };
       })
       .filter((e) => e.expiresAt > now)
-      .sort((a, b) => b.createdAt - a.createdAt);
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, limit);
   }
 }
