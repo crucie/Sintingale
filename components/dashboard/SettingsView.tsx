@@ -1,11 +1,10 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { Building2, Code2, KeyRound, Link2, Save, ShieldCheck, Users } from "lucide-react";
+import { Building2, Code2, KeyRound, Link2, Save, Users, Wallet } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
-import { useConfig, useConnection, useWriteContract } from "wagmi";
-import { waitForTransactionReceipt } from "wagmi/actions";
+import { useConnection } from "wagmi";
 import { PageHeader } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -14,10 +13,10 @@ import { Field, Input } from "@/components/ui/Field";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Switch } from "@/components/ui/Switch";
 import { ConnectButton } from "@/components/wallet/ConnectButton";
-import { NetworkGuard } from "@/components/wallet/NetworkGuard";
+import { PayoutRegistration } from "./PayoutRegistration";
 import { ApiError, useMerchant, useSaveMerchant, useSetupMerchant } from "@/lib/client/hooks";
-import { onchainEnabled, publicConfig } from "@/lib/config";
-import { paymentRouterAbi, whitechain } from "@/lib/whitechain";
+import { publicConfig } from "@/lib/config";
+import { whitechain } from "@/lib/whitechain";
 import type { MerchantDTO } from "@/lib/types";
 
 function Row({ label, value, mono = true }: { label: string; value: ReactNode; mono?: boolean }) {
@@ -40,7 +39,7 @@ function ProfileForm({ merchant }: { merchant: MerchantDTO }) {
     e.preventDefault();
     try {
       await save.mutateAsync({ merchantId: merchant.merchantId, name, payout, wallet, email });
-      toast.success("Merchant profile saved");
+      toast.success("Profile saved");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not save profile");
     }
@@ -54,10 +53,10 @@ function ProfileForm({ merchant }: { merchant: MerchantDTO }) {
       <Field label="Billing email" htmlFor="m-email">
         <Input id="m-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
       </Field>
-      <Field label="Payout address" htmlFor="m-payout" hint="USDT is forwarded here in the same transaction.">
+      <Field label="Payout address" htmlFor="m-payout" hint="Where customer USDT lands. Can be a different wallet, e.g. a treasury.">
         <Input id="m-payout" className="font-mono" value={payout} onChange={(e) => setPayout(e.target.value)} required />
       </Field>
-      <Field label="Merchant wallet" htmlFor="m-wallet" hint="The address that registered on the PaymentRouter.">
+      <Field label="Merchant wallet" htmlFor="m-wallet" hint="The wallet you sign in with to register your payout. Leave empty to use the payout address.">
         <Input
           id="m-wallet"
           className="font-mono"
@@ -93,7 +92,7 @@ function SetupForm() {
         wallet: wallet || address || "",
         email,
       });
-      toast.success("Merchant created on Arkiv. Next: register your payout on the PaymentRouter, then add plans.");
+      toast.success("Business created. Next: register your payout below, then add a product.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not create the merchant");
     }
@@ -102,8 +101,8 @@ function SetupForm() {
   return (
     <form onSubmit={onSubmit} className="grid gap-5 p-5 md:grid-cols-2">
       <p className="text-sm text-fg-muted md:col-span-2">
-        No merchant <code className="font-mono text-xs">{publicConfig.merchantId}</code> exists on Arkiv yet. Create it, then add
-        your plans on the Products page.
+        Welcome! Start by telling customers who they are paying. Connect the wallet you&apos;ll manage payments with; it
+        fills in the addresses for you.
       </p>
       <Field label="Business name" htmlFor="s-name">
         <Input id="s-name" value={name} onChange={(e) => setName(e.target.value)} required />
@@ -111,7 +110,7 @@ function SetupForm() {
       <Field label="Billing email" htmlFor="s-email">
         <Input id="s-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
       </Field>
-      <Field label="Payout address" htmlFor="s-payout" hint="Defaults to the connected wallet.">
+      <Field label="Payout address" htmlFor="s-payout" hint="Where customer USDT lands. Defaults to the connected wallet.">
         <Input
           id="s-payout"
           className="font-mono"
@@ -121,7 +120,7 @@ function SetupForm() {
           required={!address}
         />
       </Field>
-      <Field label="Merchant wallet" htmlFor="s-wallet" hint="Must be the wallet that registers on the PaymentRouter.">
+      <Field label="Merchant wallet" htmlFor="s-wallet" hint="The wallet you'll use to register your payout. Defaults to the connected wallet.">
         <Input
           id="s-wallet"
           className="font-mono"
@@ -132,7 +131,7 @@ function SetupForm() {
       </Field>
       <div className="flex flex-wrap items-center gap-3 md:col-span-2">
         <Button type="submit" loading={setup.isPending} icon={<Save className="size-4" />}>
-          Create merchant
+          Create business profile
         </Button>
         {!address ? <ConnectButton /> : null}
       </div>
@@ -198,51 +197,6 @@ function TeamsToggle({ merchant }: { merchant: MerchantDTO }) {
   );
 }
 
-function RegisterOnchain({ payout }: { payout: string }) {
-  const { isConnected } = useConnection();
-  const config = useConfig();
-  const write = useWriteContract();
-  const [busy, setBusy] = useState(false);
-
-  if (!onchainEnabled) {
-    return (
-      <p className="text-sm text-danger">
-        Payments are disabled: set <code className="font-mono text-xs">NEXT_PUBLIC_PAYMENT_ROUTER_ADDRESS</code> and{" "}
-        <code className="font-mono text-xs">NEXT_PUBLIC_USDT_ADDRESS</code> and redeploy.
-      </p>
-    );
-  }
-  if (!isConnected) return <ConnectButton />;
-  return (
-    <NetworkGuard>
-      <Button
-        loading={busy}
-        icon={<ShieldCheck className="size-4" />}
-        onClick={async () => {
-          setBusy(true);
-          try {
-            const hash = await write.mutateAsync({
-              address: publicConfig.paymentRouter!,
-              abi: paymentRouterAbi,
-              functionName: "registerMerchant",
-              args: [payout as `0x${string}`],
-              chainId: whitechain.id,
-            });
-            await waitForTransactionReceipt(config, { hash, chainId: whitechain.id });
-            toast.success("Merchant registered on Whitechain");
-          } catch (err) {
-            toast.error(err instanceof Error ? err.message.split("\n")[0] : "Registration failed");
-          } finally {
-            setBusy(false);
-          }
-        }}
-      >
-        Register payout on PaymentRouter
-      </Button>
-    </NetworkGuard>
-  );
-}
-
 export function SettingsView({ apiKeyHint, relayer }: { apiKeyHint: string; relayer: string }) {
   const merchant = useMerchant();
   const merchantMissing = merchant.error instanceof ApiError && merchant.error.status === 404;
@@ -251,10 +205,10 @@ export function SettingsView({ apiKeyHint, relayer }: { apiKeyHint: string; rela
 
   return (
     <>
-      <PageHeader title="Settings" description="Merchant profile, payout address and API access." />
+      <PageHeader title="Settings" description="Your business profile, where you get paid, and API access for your backend." />
       <div className="grid gap-6 xl:grid-cols-2">
         <Card className="xl:col-span-2">
-          <CardHeader title={<span className="inline-flex items-center gap-2"><Building2 className="size-4 text-brand" /> Merchant profile</span>} description="Stored as a merchant entity; the latest version wins." />
+          <CardHeader title={<span className="inline-flex items-center gap-2"><Building2 className="size-4 text-brand" /> Merchant profile</span>} description="Shown to customers at checkout. Saved on Arkiv; each save creates a new version." />
           {merchant.data ? (
             <ProfileForm key={merchant.data.key} merchant={merchant.data} />
           ) : merchantMissing ? (
@@ -263,6 +217,18 @@ export function SettingsView({ apiKeyHint, relayer }: { apiKeyHint: string; rela
             <Skeleton className="m-5 h-48" />
           )}
         </Card>
+
+        {merchant.data ? (
+          <Card className="xl:col-span-2">
+            <CardHeader
+              title={<span className="inline-flex items-center gap-2"><Wallet className="size-4 text-brand" /> Get paid on Whitechain</span>}
+              description="Payments in USDT go straight from the customer to your payout address."
+            />
+            <div className="p-5">
+              <PayoutRegistration merchant={merchant.data} />
+            </div>
+          </Card>
+        ) : null}
 
         <Card className="xl:col-span-2">
           <CardHeader
@@ -292,17 +258,14 @@ export function SettingsView({ apiKeyHint, relayer }: { apiKeyHint: string; rela
         </Card>
 
         <Card>
-          <CardHeader title={<span className="inline-flex items-center gap-2"><Link2 className="size-4 text-brand" /> Network</span>} description="Money moves on Whitechain. State lives on Arkiv." />
+          <CardHeader title={<span className="inline-flex items-center gap-2"><Link2 className="size-4 text-brand" /> Network</span>} description="Technical details: where money and records live." />
           <dl className="divide-y divide-border px-5">
             <Row label="Ledger" value="Arkiv testnet (Rabdi)" mono={false} />
-            <Row label="Trusted relayer ($creator)" value={relayer} />
+            <Row label="Record writer (trusted $creator)" value={relayer} />
             <Row label="Settlement chain" value={`${whitechain.name} · ${whitechain.id}`} mono={false} />
             <Row label="PaymentRouter" value={publicConfig.paymentRouter ?? "Not configured"} />
             <Row label="USDT token" value={publicConfig.usdt.address ?? "Not configured"} />
           </dl>
-          <div className="border-t border-border p-5">
-            <RegisterOnchain payout={merchant.data?.payout ?? ""} />
-          </div>
         </Card>
       </div>
     </>

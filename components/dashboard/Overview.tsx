@@ -10,19 +10,21 @@ import { useInvoices, useMerchant, useStats } from "@/lib/client/hooks";
 import { formatUsdt } from "@/lib/format";
 import { InvoiceTable } from "./InvoiceTable";
 import { RevenueChart } from "./RevenueChart";
+import { SetupChecklist, useSetupSteps } from "./SetupChecklist";
 import { StatCard } from "./StatCard";
 
 export function Overview() {
   const stats = useStats();
   const invoices = useInvoices();
   const merchant = useMerchant();
+  const setup = useSetupSteps();
   const s = stats.data?.stats;
 
   return (
     <>
       <PageHeader
         title={merchant.data ? `Hi, ${merchant.data.name}` : "Overview"}
-        description="Every number here is a live query against the billing ledger. No private database."
+        description="Your payments at a glance. Everything updates live as customers pay."
         action={
           <div className="flex gap-2">
             <ButtonLink href="/dashboard/products" variant="outline" icon={<PackagePlus className="size-4" aria-hidden />}>
@@ -37,19 +39,21 @@ export function Overview() {
         }
       />
 
+      {!setup.loading && !setup.complete ? <SetupChecklist setup={setup} /> : null}
+
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatCard
           icon={CircleDollarSign}
           label="Revenue, 30 days"
           value={s ? formatUsdt(s.revenue30d) : "—"}
-          hint="Sum of relayer-signed receipts"
+          hint="USDT received from paid invoices"
           loading={stats.isLoading}
         />
         <StatCard
           icon={Receipt}
           label="Paid invoices, 30 days"
           value={s?.paidCount30d ?? "—"}
-          hint='type="receipt" && paidAt > now-30d'
+          hint="Payments confirmed on Whitechain"
           loading={stats.isLoading}
         />
         <StatCard
@@ -61,9 +65,9 @@ export function Overview() {
         />
         <StatCard
           icon={BadgeCheck}
-          label="Active entitlements"
+          label="Customers with access"
           value={s?.activeEntitlements ?? "—"}
-          hint="Customers with access right now"
+          hint="Paid plans that haven't run out yet"
           loading={stats.isLoading}
         />
       </div>
@@ -74,7 +78,7 @@ export function Overview() {
           {s ? <RevenueChart series={s.series} /> : <Skeleton className="m-5 h-40" />}
         </Card>
         <Card>
-          <CardHeader title="Next steps" />
+          <CardHeader title="Quick actions" />
           <ul className="divide-y divide-border">
             {[
               { href: "/dashboard/invoices/new", icon: FilePlus2, title: "Share a checkout link", body: "Create an invoice and send the link or QR." },
@@ -101,7 +105,7 @@ export function Overview() {
       <Card className="mt-6">
         <CardHeader
           title="Recent activity"
-          description="Polled every few seconds from the ledger"
+          description="Updates every few seconds"
           action={
             <Link href="/dashboard/invoices" className="text-sm font-medium text-brand underline-offset-4 hover:underline">
               View all
