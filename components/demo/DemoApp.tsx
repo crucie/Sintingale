@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
 import { Activity, ArrowRight, BarChart3, Code2, Lock, LockOpen, Search, Users } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -9,13 +9,14 @@ import { useConnection } from "wagmi";
 import { checkAccessAction, loadStoreAction, startCheckoutAction } from "@/app/demo/actions";
 import { ExpiryCountdown } from "@/components/dashboard/ExpiryCountdown";
 import { Button } from "@/components/ui/Button";
-import { Field, Input, Select } from "@/components/ui/Field";
+import { Field, Input } from "@/components/ui/Field";
 import { Logo } from "@/components/ui/Logo";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { ConnectButton } from "@/components/wallet/ConnectButton";
 import { publicConfig } from "@/lib/config";
 import { cn, formatUsdt, shortHash } from "@/lib/format";
 import { RECURRENCE_LABEL } from "@/lib/schema";
+import type { AccessResult, PlanDTO } from "@/lib/types";
 
 const isAddress = (v: string) => /^0x[0-9a-fA-F]{40}$/.test(v);
 
@@ -47,184 +48,198 @@ function SampleAnalytics() {
   );
 }
 
+function PlanCard({
+  plan,
+  access,
+  checking,
+  onBuy,
+  buying,
+  canBuy,
+}: {
+  plan: PlanDTO;
+  access: AccessResult | undefined;
+  checking: boolean;
+  onBuy: () => void;
+  buying: boolean;
+  canBuy: boolean;
+}) {
+  const active = access?.active ?? false;
+  return (
+    <div className={cn("flex flex-col rounded-2xl border bg-bg p-5", active ? "border-success/40" : "border-border")}>
+      <p className="font-display text-lg font-semibold text-fg">{plan.name}</p>
+      {plan.description ? <p className="mt-1 text-sm text-fg-muted">{plan.description}</p> : null}
+      <p className="mt-4 font-display text-3xl font-bold tabular-nums text-fg">
+        {formatUsdt(plan.amount, { symbol: false })} <span className="text-base font-medium text-fg-muted">USDT</span>
+      </p>
+      <p className="text-xs text-fg-muted">{RECURRENCE_LABEL[plan.recurrence]}</p>
+      <div className="mt-5 flex-1" />
+      {active && access?.periodEnd ? (
+        <p className="flex flex-wrap items-center gap-1 rounded-xl bg-success-soft px-3 py-2 text-sm text-success">
+          <LockOpen className="size-4" aria-hidden /> Active · renews by paying again in <ExpiryCountdown expiresAt={access.periodEnd} />
+        </p>
+      ) : (
+        <Button onClick={onBuy} loading={buying} disabled={!canBuy || checking} icon={<ArrowRight className="size-4" />} className="w-full">
+          {canBuy ? `${plan.recurrence === "one-time" ? "Buy" : "Subscribe"} with USDT` : "Connect wallet to subscribe"}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 export function DemoApp() {
-  const { address } = useConnection();
-  const [input, setInput] = useState("");
-  const [checked, setChecked] = useState<string | null>(null);
-  const [selectedPlanId, setPlanId] = useState("");
+  const { address, isConnected } = useConnection();
   const store = useQuery({ queryKey: ["example-store"], queryFn: () => loadStoreAction() });
   const plans = store.data?.plans ?? [];
-  const planId = selectedPlanId || plans[0]?.planId || "";
-  const plan = plans.find((p) => p.planId === planId);
-  // Until another wallet is checked by hand, the connected wallet is the visitor.
+  const merchantName = store.data?.merchantName ?? "Example SaaS";
+  const [override, setOverride] = useState("");
+  const [checked, setChecked] = useState<string | null>(null);
+  // The visitor is the connected wallet, unless a developer checks another address below.
   const customer = checked ?? address ?? null;
 
-  const access = useQuery({
-    queryKey: ["demo-access", customer, planId],
-    queryFn: () => checkAccessAction(customer!, planId),
-    enabled: Boolean(customer && planId),
-    refetchInterval: 5_000,
+  const accessQueries = useQueries({
+    queries: plans.map((p) => ({
+      queryKey: ["example-access", customer, p.planId],
+      queryFn: () => checkAccessAction(customer!, p.planId),
+      enabled: Boolean(customer),
+      refetchInterval: 5_000,
+    })),
   });
+  const accessByPlan = new Map(plans.map((p, i) => [p.planId, accessQueries[i]?.data]));
+  const activePlan = plans.find((p) => accessByPlan.get(p.planId)?.active);
+  const firstAccess = activePlan ? accessByPlan.get(activePlan.planId) : plans[0] ? accessByPlan.get(plans[0].planId) : undefined;
 
   const buy = useMutation({
-    mutationFn: () => startCheckoutAction(customer!, planId),
+    mutationFn: (planId: string) => startCheckoutAction(customer!, planId),
     onSuccess: ({ checkoutUrl }) => {
       window.location.href = checkoutUrl;
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "Could not start checkout"),
   });
 
-  const check = (value: string) => {
-    if (!isAddress(value)) {
-      toast.error("Enter a valid 0x wallet address");
-      return;
-    }
-    setInput(value);
-    setChecked(value);
-  };
-
-  const active = access.data?.active ?? false;
-
   return (
     <div className="min-h-dvh bg-muted">
       <header className="border-b border-border bg-bg">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-3 px-4">
           <div className="flex items-center gap-3">
-            <span className="font-display text-lg font-bold text-fg">{store.data?.merchantName ?? "Example SaaS"}</span>
+            <span className="font-display text-lg font-bold text-fg">{merchantName}</span>
             <span className="rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand">example app</span>
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <Link href="/dashboard" className="hidden text-sm text-fg-muted hover:text-fg sm:block">
-              Merchant dashboard
-            </Link>
+            <ConnectButton size="sm" />
           </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-5xl space-y-6 px-4 py-8">
         <section className="rounded-3xl border border-border bg-bg p-5 sm:p-6">
-          <h1 className="font-display text-2xl font-bold tracking-tight text-fg">Who is visiting?</h1>
+          <h1 className="font-display text-2xl font-bold tracking-tight text-fg">
+            {activePlan ? `You're on ${activePlan.name}` : "Choose a plan to unlock Pro analytics"}
+          </h1>
           <p className="mt-1 text-sm text-fg-muted">
-            This page plays the merchant&apos;s backend. It asks Sintingale one question: does this wallet hold a live entitlement for the
-            plan? Plans come from the merchant&apos;s catalogue on Arkiv.
+            {!isConnected && !checked
+              ? "Connect your wallet first. Your wallet is your account: no sign-up, no password."
+              : activePlan
+                ? "Your payment is confirmed. The content below is unlocked for this wallet."
+                : "Pay once in USDT on Whitechain. Access unlocks within seconds and ends by itself when the period is over."}
           </p>
+          {!isConnected && !checked ? (
+            <div className="mt-4">
+              <ConnectButton />
+            </div>
+          ) : null}
+
+          {store.isLoading ? (
+            <p className="mt-6 text-sm text-fg-muted">Loading plans…</p>
+          ) : !plans.length ? (
+            <p className="mt-6 rounded-xl border border-border p-4 text-sm text-fg-muted">
+              This store has no plans yet. If you run it, add one in{" "}
+              <Link href="/dashboard/products" className="text-brand hover:underline">
+                Dashboard → Products
+              </Link>
+              .
+            </p>
+          ) : (
+            <div className="mt-6 grid gap-4 md:grid-cols-3">
+              {plans.map((p, i) => (
+                <PlanCard
+                  key={p.planId}
+                  plan={p}
+                  access={accessByPlan.get(p.planId)}
+                  checking={accessQueries[i]?.isLoading ?? false}
+                  onBuy={() => buy.mutate(p.planId)}
+                  buying={buy.isPending && buy.variables === p.planId}
+                  canBuy={Boolean(customer)}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="relative overflow-hidden rounded-3xl border border-border bg-surface p-5 sm:p-6">
+          <h2 className="mb-4 font-display text-lg font-semibold text-fg">Pro analytics</h2>
+          <div className={cn("transition-all duration-500", !activePlan && "pointer-events-none select-none blur-md")} aria-hidden={!activePlan}>
+            <SampleAnalytics />
+          </div>
+          {!activePlan ? (
+            <div className="absolute inset-0 grid place-items-center bg-bg/40 p-6 text-center">
+              <div className="max-w-xs">
+                <Lock className="mx-auto size-8 text-brand" aria-hidden />
+                <p className="mt-2 font-display text-lg font-semibold text-fg">Unlocks after payment</p>
+                <p className="mt-1 text-sm text-fg-muted">Pick a plan above. This page checks your access every few seconds.</p>
+              </div>
+            </div>
+          ) : null}
+        </section>
+
+        <details className="group rounded-3xl bg-[#1d1410] p-5 text-[#ffd9cc] sm:p-6">
+          <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium text-white">
+            <Code2 className="size-4" aria-hidden /> How this page works (for developers)
+          </summary>
+          <p className="mt-3 text-xs text-white/70">
+            This app plays a merchant&apos;s SaaS backend. To decide what to show, it asks Sintingale one question for each plan:
+            does this wallet hold a live entitlement? That is a single query against Arkiv.
+          </p>
+          <pre className="mt-3 overflow-x-auto font-mono text-xs leading-relaxed">{`const active = await sintingale.hasAccess({
+  merchantId: "${publicConfig.merchantId}",
+  planId: "${activePlan?.planId ?? plans[0]?.planId ?? "pro"}",
+  customer: "${customer ?? "0x…"}",
+});`}</pre>
+          {firstAccess ? (
+            <>
+              <p className="mt-4 text-xs text-white/60">Arkiv query</p>
+              <pre className="mt-1 overflow-x-auto whitespace-pre-wrap break-all font-mono text-xs text-white/80">{firstAccess.query}</pre>
+            </>
+          ) : null}
           <form
-            className="mt-5 grid gap-4 md:grid-cols-[1fr_260px_auto] md:items-end"
+            className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-end"
             onSubmit={(e) => {
               e.preventDefault();
-              check(input.trim());
+              const v = override.trim();
+              if (!isAddress(v)) return toast.error("Enter a valid 0x wallet address");
+              setChecked(v);
             }}
           >
-            <Field label="Customer wallet" htmlFor="demo-customer">
+            <Field label="Check another wallet" htmlFor="demo-customer" className="flex-1 text-white">
               <Input
                 id="demo-customer"
                 className="font-mono"
                 placeholder={address ?? "0x…"}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
+                value={override}
+                onChange={(e) => setOverride(e.target.value)}
                 autoComplete="off"
               />
             </Field>
-            <Field label="Plan" htmlFor="demo-plan">
-              <Select id="demo-plan" value={planId} onChange={(e) => setPlanId(e.target.value)} disabled={!plans.length}>
-                {plans.length ? (
-                  plans.map((p) => (
-                    <option key={p.planId} value={p.planId}>
-                      {p.name} · {formatUsdt(p.amount)} / {RECURRENCE_LABEL[p.recurrence].toLowerCase()}
-                    </option>
-                  ))
-                ) : (
-                  <option value="">{store.isLoading ? "Loading plans…" : "No plans yet"}</option>
-                )}
-              </Select>
-            </Field>
-            <Button type="submit" icon={<Search className="size-4" />} loading={access.isFetching && !access.data} disabled={!plans.length}>
-              hasAccess()
+            <Button type="submit" variant="secondary" icon={<Search className="size-4" />}>
+              Check
             </Button>
-          </form>
-          <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
-            {address ? (
-              <button onClick={() => check(address)} className="rounded-full border border-border px-3 py-1.5 font-mono hover:border-brand hover:text-brand">
-                Use my wallet {shortHash(address)}
-              </button>
-            ) : (
-              <>
-                <span className="text-fg-muted">Connect the wallet you pay with:</span>
-                <ConnectButton size="sm" />
-              </>
-            )}
-            {!store.isLoading && !plans.length ? (
-              <span className="text-fg-muted">
-                The merchant has no plans yet. Add one in <Link href="/dashboard/products" className="text-brand hover:underline">Products</Link>.
-              </span>
-            ) : null}
-          </div>
-        </section>
-
-        {customer && access.data ? (
-          <section
-            className={cn(
-              "flex flex-col gap-3 rounded-3xl border p-5 sm:flex-row sm:items-center sm:justify-between",
-              active ? "border-success/30 bg-success-soft" : "border-border bg-bg",
-            )}
-            aria-live="polite"
-          >
-            <div className="flex items-center gap-3">
-              {active ? <LockOpen className="size-6 text-success" aria-hidden /> : <Lock className="size-6 text-fg-muted" aria-hidden />}
-              <div>
-                <p className="font-semibold text-fg">{active ? "Access granted" : "No active entitlement"}</p>
-                <p className="text-sm text-fg-muted">
-                  {active ? (
-                    <span className="inline-flex flex-wrap items-center gap-1">
-                      Entitlement lapses on its own in <ExpiryCountdown expiresAt={access.data.periodEnd} />
-                    </span>
-                  ) : (
-                    "Pay once and the entitlement appears; when the period ends it simply expires."
-                  )}
-                </p>
-              </div>
-            </div>
-            {!active ? (
-              <Button onClick={() => buy.mutate()} loading={buy.isPending} icon={<ArrowRight className="size-4" />}>
-                Buy {plan?.name ?? "plan"} · {plan ? formatUsdt(plan.amount) : ""}
+            {checked ? (
+              <Button type="button" variant="ghost" className="text-white" onClick={() => setChecked(null)}>
+                Back to {address ? shortHash(address) : "my wallet"}
               </Button>
             ) : null}
-          </section>
-        ) : null}
-
-        <section className="relative overflow-hidden rounded-3xl border border-border bg-surface p-5 sm:p-6">
-          <h2 className="mb-4 font-display text-lg font-semibold text-fg">Pro analytics</h2>
-          <div className={cn("transition-all duration-500", !active && "pointer-events-none select-none blur-md")} aria-hidden={!active}>
-            <SampleAnalytics />
-          </div>
-          {!active ? (
-            <div className="absolute inset-0 grid place-items-center bg-bg/40 p-6 text-center">
-              <div className="max-w-xs">
-                <Lock className="mx-auto size-8 text-brand" aria-hidden />
-                <p className="mt-2 font-display text-lg font-semibold text-fg">Locked behind a single query</p>
-                <p className="mt-1 text-sm text-fg-muted">Check a wallet above to see Sintingale decide.</p>
-              </div>
-            </div>
-          ) : null}
-        </section>
-
-        <section className="rounded-3xl bg-[#1d1410] p-5 text-[#ffd9cc] sm:p-6">
-          <p className="flex items-center gap-2 text-sm font-medium text-white">
-            <Code2 className="size-4" aria-hidden /> What the backend runs
-          </p>
-          <pre className="mt-3 overflow-x-auto font-mono text-xs leading-relaxed">{`const active = await sintingale.hasAccess({
-  merchantId: "${publicConfig.merchantId}",
-  planId: "${planId}",
-  customer: "${customer ?? "0x…"}",
-});`}</pre>
-          {access.data ? (
-            <>
-              <p className="mt-4 text-xs text-white/60">Ledger query</p>
-              <pre className="mt-1 overflow-x-auto whitespace-pre-wrap break-all font-mono text-xs text-white/80">{access.data.query}</pre>
-            </>
-          ) : null}
-        </section>
+          </form>
+        </details>
 
         <p className="flex items-center justify-center gap-2 pb-4 text-xs text-fg-muted">
           Billing by <Logo className="text-sm" />
