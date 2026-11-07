@@ -7,8 +7,12 @@ import { useChainId, useConnection, useSwitchChain } from "wagmi";
 import { Button } from "@/components/ui/Button";
 import { whitechain } from "@/lib/whitechain";
 
-/** Renders children only when the connected wallet is on Whitechain; otherwise offers a switch. */
-export function NetworkGuard({ children }: { children: ReactNode }) {
+/**
+ * Renders children only when the wallet is on the network an action needs, and
+ * says which network before any wallet prompt. Payments, splits and claims run
+ * on Whitechain; ENS writes happen in the ENS app on Sepolia, never here.
+ */
+export function NetworkGuard({ children, action = "Payments" }: { children: ReactNode; action?: string }) {
   const { isConnected, chainId: walletChain } = useConnection();
   const configured = useChainId();
   const switchChain = useSwitchChain();
@@ -21,9 +25,9 @@ export function NetworkGuard({ children }: { children: ReactNode }) {
       <div className="flex items-start gap-3">
         <AlertTriangle className="mt-0.5 size-5 shrink-0 text-warning" aria-hidden />
         <div>
-          <p className="font-medium text-fg">Wrong network</p>
+          <p className="font-medium text-fg">Switch to {whitechain.name}</p>
           <p className="text-sm text-fg-muted">
-            Payments settle on {whitechain.name} (chain {whitechain.id}). Switch your wallet to continue.
+            {action} settle on {whitechain.name} (chain {whitechain.id}). Your wallet is on another network.
           </p>
         </div>
       </div>

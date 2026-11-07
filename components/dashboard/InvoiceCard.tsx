@@ -2,6 +2,7 @@ import { formatUsdt, shortHash } from "@/lib/format";
 import type { InvoiceRow } from "@/lib/types";
 import { ExpiryCountdown } from "./ExpiryCountdown";
 import { InvoiceActions } from "./InvoiceActions";
+import { InvoiceTags } from "./InvoiceTags";
 import { StatusBadge } from "./StatusBadge";
 
 export function InvoiceCard({ invoice }: { invoice: InvoiceRow }) {
@@ -11,6 +12,7 @@ export function InvoiceCard({ invoice }: { invoice: InvoiceRow }) {
         <div>
           <p className="font-display text-lg font-semibold tabular-nums text-fg">{formatUsdt(invoice.amount)}</p>
           <p className="text-sm text-fg-muted">{invoice.description}</p>
+          <InvoiceTags invoice={invoice} />
         </div>
         <StatusBadge status={invoice.status} />
       </div>

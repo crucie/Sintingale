@@ -2,10 +2,16 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import type { Hex } from "viem";
 import { SintingaleError } from "./api";
-import { onchainEnabled, publicConfig, serverConfig } from "./config";
+import { onchainEnabled, publicConfig, serverConfig, splitterEnabled } from "./config";
+import { isDemoName } from "./demo";
+import { getProfile } from "./ens/resolve";
+import { teamsEnabled } from "./features";
 import { toBaseUnits } from "./format";
 import { getLedger, relayerAddress, type StoredEntity } from "./ledger";
-import { pollPaidEvents, verifyPaidTx } from "./relayer";
+import { demoPlans } from "./ledger/seed";
+import { getOrgEntity, getOrgForMerchant, getProjectEntity } from "./orgs";
+import { pollCreditedEvents, pollPaidEvents, verifyPaidTx, verifyProjectPaidTx } from "./relayer";
+import { computeCredits } from "./splits";
 import {
   RECURRENCE_SECONDS,
   type InvoiceInput,
@@ -19,6 +25,7 @@ import type {
   DashboardStats,
   InvoiceRow,
   MerchantDTO,
+  MerchantIdentity,
   PlanDTO,
   ReceiptDTO,
   VerifyCheck,
@@ -41,6 +48,7 @@ export async function getMerchant(merchantId: string): Promise<MerchantDTO | nul
 }
 
 export async function upsertMerchant(input: MerchantInput): Promise<MerchantDTO> {
+  const previous = await getMerchant(input.merchantId);
   const entity = await getLedger().create(
     "merchant",
     {
@@ -49,10 +57,27 @@ export async function upsertMerchant(input: MerchantInput): Promise<MerchantDTO>
       payout: input.payout,
       wallet: input.wallet || undefined,
       email: input.email || undefined,
+      teamsEnabled: input.teamsEnabled ?? previous?.teamsEnabled ?? false,
     },
     nowSec() + 365 * DAY,
   );
   return { ...entity.attrs, key: entity.key, createdAt: entity.createdAt };
+}
+
+/**
+ * First run on an empty ledger (Arkiv mode seeds nothing): writes the merchant
+ * plus any of the demo plans that do not exist yet, so `/demo` has plans to sell.
+ */
+export async function setupMerchant(input: MerchantInput): Promise<{ merchant: MerchantDTO; plansCreated: string[] }> {
+  const merchant = await upsertMerchant(input);
+  const existing = new Set((await listPlans(input.merchantId)).map((p) => p.planId));
+  const plansCreated: string[] = [];
+  for (const plan of demoPlans(input.merchantId)) {
+    if (existing.has(plan.planId)) continue;
+    await getLedger().create("plan", plan, nowSec() + 365 * DAY);
+    plansCreated.push(plan.planId);
+  }
+  return { merchant, plansCreated };
 }
 
 /* ----------------------------------------------------------------------------
@@ -102,10 +127,30 @@ export function checkoutUrl(invoiceKey: string, origin?: string) {
   return `${base}/pay/${invoiceKey}`;
 }
 
-export async function createInvoice(input: InvoiceInput, origin?: string) {
-  const plan = await getPlan(input.merchantId, input.planId);
-  if (!plan) throw new SintingaleError("NOT_FOUND", `Plan "${input.planId}" was not found.`);
-  const amount = input.amount ? toBaseUnits(input.amount) : plan.amount;
+export interface InvoiceOrigin {
+  /** ENS name of the agent creating the invoice, recorded for auditability. */
+  createdBy?: string;
+  grantId?: string;
+}
+
+export async function createInvoice(input: InvoiceInput, origin?: string, by: InvoiceOrigin = {}) {
+  const plan = input.planId ? await getPlan(input.merchantId, input.planId) : null;
+  if (input.planId && !plan) throw new SintingaleError("NOT_FOUND", `Plan "${input.planId}" was not found.`);
+
+  let projectName: string | undefined;
+  if (input.projectId) {
+    if (onchainEnabled && !splitterEnabled) {
+      throw new SintingaleError("NOT_CONFIGURED", "Set NEXT_PUBLIC_SPLITTER_ADDRESS to accept project payments on-chain.");
+    }
+    const { org, project } = await getProjectEntity(input.orgId!, input.projectId);
+    if (org.attrs.merchantId !== input.merchantId) throw new SintingaleError("FORBIDDEN", "Project belongs to another merchant.");
+    if (!project || !project.attrs.shares.length) {
+      throw new SintingaleError("BAD_REQUEST", "Set the project's share table before invoicing it.");
+    }
+    projectName = project.attrs.name;
+  }
+
+  const amount = input.amount ? toBaseUnits(input.amount) : plan!.amount;
   const dueAt = nowSec() + Math.round(input.dueInHours * 3600);
   const expiresAt = dueAt + serverConfig().invoiceGraceSec;
   const isEmail = input.customer?.includes("@");
@@ -115,13 +160,17 @@ export async function createInvoice(input: InvoiceInput, origin?: string) {
     {
       merchantId: input.merchantId,
       invoiceId: `inv_${randomBytes(3).toString("hex")}`,
-      planId: plan.planId,
+      planId: plan?.planId ?? "",
       customer: norm(input.customer),
       status: "pending",
       amount,
       dueAt,
-      description: input.description || plan.name,
+      description: input.description || plan?.name || projectName || "Invoice",
       email: isEmail ? norm(input.customer) : undefined,
+      orgId: input.projectId ? norm(input.orgId) : undefined,
+      projectId: input.projectId,
+      createdBy: by.createdBy,
+      grantId: by.grantId,
     },
     expiresAt,
   );
@@ -151,6 +200,9 @@ function receiptToRow(r: StoredEntity<"receipt">, invoice?: StoredEntity<"invoic
     receiptKey: r.key,
     payer: r.attrs.payer,
     simulated: r.attrs.simulated,
+    orgId: r.attrs.orgId,
+    projectId: r.attrs.projectId,
+    createdBy: invoice?.attrs.createdBy,
   };
 }
 
@@ -167,6 +219,9 @@ function invoiceToRow(i: StoredEntity<"invoice">): InvoiceRow {
     dueAt: i.attrs.dueAt,
     expiresAt: i.expiresAt,
     createdAt: i.createdAt,
+    orgId: i.attrs.orgId,
+    projectId: i.attrs.projectId,
+    createdBy: i.attrs.createdBy,
   };
 }
 
@@ -178,10 +233,17 @@ const trustedReceipts = (merchantId: string) =>
  * invoice without one means Pending, and an expired invoice simply stops
  * being returned.
  */
+/** With Teams & ENS off, project invoices are hidden so the basic dashboard stays basic. */
+async function visibleToMerchant(merchantId: string) {
+  const teams = await teamsEnabled(merchantId);
+  return <T extends { attrs: { projectId?: string } }>(rows: T[]) => (teams ? rows : rows.filter((r) => !r.attrs.projectId));
+}
+
 export async function listInvoiceRows(merchantId: string): Promise<InvoiceRow[]> {
+  const visible = await visibleToMerchant(merchantId);
   const [invoices, receipts] = await Promise.all([
-    getLedger().query("invoice", { eq: { merchantId } }),
-    trustedReceipts(merchantId),
+    getLedger().query("invoice", { eq: { merchantId } }).then(visible),
+    trustedReceipts(merchantId).then(visible),
   ]);
   const receiptByInvoice = new Map(receipts.map((r) => [r.attrs.invoiceId, r]));
   const rows: InvoiceRow[] = [];
@@ -224,7 +286,17 @@ export async function resolveCheckout(invoiceKey: string): Promise<CheckoutData>
   }
   const merchantId = invoice?.attrs.merchantId ?? receipt!.attrs.merchantId;
   const planId = invoice?.attrs.planId ?? receipt!.attrs.planId;
-  const [merchant, plan] = await Promise.all([getMerchant(merchantId), getPlan(merchantId, planId)]);
+  const orgId = invoice?.attrs.orgId ?? receipt?.attrs.orgId;
+  const projectId = invoice?.attrs.projectId ?? receipt?.attrs.projectId;
+  const [merchant, plan] = await Promise.all([getMerchant(merchantId), planId ? getPlan(merchantId, planId) : null]);
+
+  let project: CheckoutData["project"] = null;
+  if (orgId && projectId) {
+    const { project: p } = await getProjectEntity(orgId, projectId).catch(() => ({ project: null }));
+    if (p) project = { name: p.attrs.name, onchainId: p.attrs.onchainId, splitContract: p.attrs.splitContract, shares: p.attrs.shares };
+  }
+  const identity = await merchantIdentity(merchantId, merchant?.wallet || merchant?.payout || "", orgId);
+
   return {
     invoice: receipt ? receiptToRow(receipt, invoice ?? undefined) : invoiceToRow(invoice!),
     merchant: {
@@ -234,6 +306,45 @@ export async function resolveCheckout(invoiceKey: string): Promise<CheckoutData>
       wallet: merchant?.wallet ?? merchant?.payout,
     },
     plan,
+    identity,
+    project,
+  };
+}
+
+/**
+ * Who the customer is paying. Project invoices pay the org verified by ENS; the
+ * org's name is re-resolved live and must still point at the recorded payout,
+ * otherwise checkout blocks payment. Sellers without ENS show their address.
+ */
+async function merchantIdentity(merchantId: string, merchantPayout: string, orgId?: string): Promise<MerchantIdentity> {
+  const unverified: MerchantIdentity = {
+    ensName: null,
+    avatar: null,
+    resolvedAddress: null,
+    payout: merchantPayout.toLowerCase(),
+    verified: false,
+    demo: false,
+    mismatch: false,
+  };
+  // With Teams & ENS off, checkout never touches ENS: the seller shows as an address.
+  if (!(await teamsEnabled(merchantId))) return unverified;
+  const org = orgId ? await getOrgEntity(orgId) : await getOrgForMerchant(merchantId).catch(() => null);
+  if (!org) return unverified;
+  // A baseline invoice only shows the name when the money actually goes to the name's payout.
+  if (!orgId && org.attrs.payout.toLowerCase() !== unverified.payout) return unverified;
+  const profile = await getProfile(org.attrs.ensName);
+  if (!profile.address) {
+    return { ...unverified, payout: org.attrs.payout.toLowerCase(), ensName: org.attrs.ensName, demo: isDemoName(org.attrs.ensName) };
+  }
+  const mismatch = profile.address !== org.attrs.payout.toLowerCase();
+  return {
+    ensName: org.attrs.ensName,
+    avatar: profile.avatar,
+    resolvedAddress: profile.address,
+    payout: org.attrs.payout.toLowerCase(),
+    verified: !mismatch,
+    demo: profile.demo,
+    mismatch,
   };
 }
 
@@ -247,7 +358,7 @@ async function writeReceiptAndEntitlement(
 ) {
   const ledger = getLedger();
   const paidAt = nowSec();
-  const plan = await getPlan(invoice.attrs.merchantId, invoice.attrs.planId);
+  const plan = invoice.attrs.planId ? await getPlan(invoice.attrs.merchantId, invoice.attrs.planId) : null;
   const customer = invoice.attrs.customer && !invoice.attrs.customer.includes("@") ? invoice.attrs.customer : norm(payment.payer);
 
   const attrs: ReceiptAttrs = {
@@ -262,8 +373,12 @@ async function writeReceiptAndEntitlement(
     paidAt,
     description: invoice.attrs.description,
     simulated: payment.simulated,
+    orgId: invoice.attrs.orgId,
+    projectId: invoice.attrs.projectId,
+    grantId: invoice.attrs.grantId,
   };
   const receipt = await ledger.create("receipt", attrs, paidAt + 180 * DAY);
+  if (!invoice.attrs.planId) return receipt;
 
   const periodEnd = paidAt + (plan?.intervalSec ?? RECURRENCE_SECONDS["one-time"]);
   await ledger.create(
@@ -301,6 +416,8 @@ export async function recordPayment(input: {
   });
   if (existing) return { receiptKey: existing.key, txHash: existing.attrs.txHash, alreadyRecorded: true };
 
+  if (invoice.attrs.projectId && invoice.attrs.orgId) return recordProjectPayment(invoice, input);
+
   if (input.simulated || !onchainEnabled) {
     if (onchainEnabled) {
       throw new SintingaleError("BAD_REQUEST", "Simulated payments are disabled when on-chain mode is configured.");
@@ -336,18 +453,98 @@ export async function recordPayment(input: {
   return { receiptKey: receipt.key, txHash: receipt.attrs.txHash, alreadyRecorded: false };
 }
 
-/** Cron-style relayer pass: scans new `Paid` logs and writes any receipts that are missing. */
+/**
+ * Project invoices: the relayer writes one receipt plus one payout entity per
+ * credited account. On-chain, credits come from the splitter's events; in
+ * simulated mode they are computed with the exact same integer math.
+ */
+async function recordProjectPayment(
+  invoice: StoredEntity<"invoice">,
+  input: { txHash?: string; payer?: string; simulated?: boolean },
+) {
+  const ledger = getLedger();
+  const orgId = invoice.attrs.orgId!;
+  const projectId = invoice.attrs.projectId!;
+  const { org, project } = await getProjectEntity(orgId, projectId);
+  if (!project) throw new SintingaleError("NOT_FOUND", "The invoice's project no longer exists.");
+
+  let payment: { txHash: string; payer: string; simulated: boolean; version: number; credits: Array<{ account: string; amount: number; bps: number }> };
+  if (splitterEnabled) {
+    if (!input.txHash) throw new SintingaleError("BAD_REQUEST", "txHash is required.");
+    try {
+      const verified = await verifyProjectPaidTx(input.txHash as Hex, {
+        invoiceId: invoice.attrs.invoiceId,
+        amount: invoice.attrs.amount,
+        onchainProjectId: project.attrs.onchainId,
+      });
+      payment = {
+        txHash: verified.txHash,
+        payer: verified.payer,
+        simulated: false,
+        version: verified.version,
+        credits: verified.credits.map((c) => ({ account: c.account, amount: Number(c.amount), bps: c.bps })),
+      };
+    } catch (err) {
+      console.error("[sintingale] project payment rejected", invoice.attrs.invoiceId, err);
+      throw new SintingaleError("PAYMENT_NOT_VERIFIED", err instanceof Error ? err.message : "Could not verify payment.");
+    }
+  } else {
+    if (onchainEnabled) throw new SintingaleError("NOT_CONFIGURED", "Project payments need the ProjectSplitter.");
+    payment = {
+      txHash: input.txHash ?? randomHex(32),
+      payer: input.payer ?? randomHex(20),
+      simulated: true,
+      version: project.attrs.version,
+      credits: computeCredits(invoice.attrs.amount, project.attrs.shares, org.attrs.owner),
+    };
+  }
+
+  const receipt = await writeReceiptAndEntitlement(invoice, payment);
+  const names = new Map(project.attrs.shares.map((s) => [s.account.toLowerCase(), s.subname]));
+  names.set(org.attrs.owner.toLowerCase(), names.get(org.attrs.owner.toLowerCase()) ?? org.attrs.ensName);
+  const existing = await ledger.query("payout", { eq: { txHash: payment.txHash.toLowerCase(), invoiceId: invoice.attrs.invoiceId }, creator: relayerAddress() });
+  const already = new Set(existing.map((p) => `${p.attrs.account}:${p.attrs.shareBps}`));
+  const paidAt = receipt.attrs.paidAt;
+  for (const c of payment.credits) {
+    if (already.has(`${c.account}:${c.bps}`)) continue;
+    await ledger.create(
+      "payout",
+      {
+        orgId,
+        projectId,
+        invoiceId: invoice.attrs.invoiceId,
+        account: c.account,
+        subname: names.get(c.account) ?? c.account,
+        txHash: payment.txHash.toLowerCase(),
+        amount: c.amount,
+        shareBps: c.bps,
+        version: payment.version,
+        paidAt,
+        simulated: payment.simulated,
+      },
+      paidAt + 180 * DAY,
+    );
+  }
+  return { receiptKey: receipt.key, txHash: receipt.attrs.txHash, alreadyRecorded: false };
+}
+
+/** Cron-style relayer pass: scans new `Paid` and `Credited` logs and writes any receipts that are missing. */
 export async function relayerTick() {
-  const { events, fromBlock, toBlock } = await pollPaidEvents();
-  if (events.length === 0) return { processed: 0, fromBlock: fromBlock.toString(), toBlock: toBlock.toString() };
+  const [{ events, fromBlock, toBlock }, credited] = await Promise.all([pollPaidEvents(), pollCreditedEvents()]);
+  const all = [...events.map((e) => ({ hash: e.invoiceIdHash, txHash: e.txHash, payer: e.payer as string | undefined })), ...credited];
+  if (all.length === 0) return { processed: 0, fromBlock: fromBlock.toString(), toBlock: toBlock.toString() };
   const invoices = await getLedger().query("invoice", {});
   const byHash = new Map(invoices.map((i) => [invoiceIdToBytes32(i.attrs.invoiceId).toLowerCase(), i]));
   let processed = 0;
-  for (const event of events) {
-    const invoice = byHash.get(event.invoiceIdHash.toLowerCase());
+  for (const event of all) {
+    const invoice = byHash.get(event.hash.toLowerCase());
     if (!invoice) continue;
-    const result = await recordPayment({ invoiceKey: invoice.key, txHash: event.txHash, payer: event.payer });
-    if (!result.alreadyRecorded) processed++;
+    try {
+      const result = await recordPayment({ invoiceKey: invoice.key, txHash: event.txHash, payer: event.payer });
+      if (!result.alreadyRecorded) processed++;
+    } catch (err) {
+      console.error("[sintingale] relayer could not record", invoice.attrs.invoiceId, err);
+    }
   }
   return { processed, fromBlock: fromBlock.toString(), toBlock: toBlock.toString() };
 }
@@ -457,9 +654,10 @@ export async function dashboardStats(merchantId: string): Promise<DashboardStats
   const now = nowSec();
   const since = now - 30 * DAY;
   const ledger = getLedger();
+  const visible = await visibleToMerchant(merchantId);
   const [receipts, invoices, entitlements] = await Promise.all([
-    ledger.query("receipt", { eq: { merchantId }, gt: { paidAt: since }, creator: relayerAddress() }),
-    ledger.query("invoice", { eq: { merchantId } }),
+    ledger.query("receipt", { eq: { merchantId }, gt: { paidAt: since }, creator: relayerAddress() }).then(visible),
+    ledger.query("invoice", { eq: { merchantId } }).then(visible),
     ledger.query("entitlement", { eq: { merchantId }, gt: { periodEnd: now }, creator: relayerAddress() }),
   ]);
   const paidIds = new Set(receipts.map((r) => r.attrs.invoiceId));

@@ -4,33 +4,44 @@ import { ExternalLink, FlaskConical } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Logo, LogoMark } from "@/components/ui/Logo";
+import { useTeamsEnabled } from "@/lib/client/org";
 import { cn } from "@/lib/format";
-import { isActive, NAV } from "./nav";
+import { isActive, navGroupsFor } from "./nav";
 
 export function NavLinks({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate?: () => void }) {
   const pathname = usePathname();
+  const teams = useTeamsEnabled() === true;
   return (
-    <nav className="flex flex-col gap-1" aria-label="Dashboard">
-      {NAV.map((item) => {
-        const active = isActive(pathname, item);
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={onNavigate}
-            title={collapsed ? item.label : undefined}
-            aria-current={active ? "page" : undefined}
-            className={cn(
-              "flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors",
-              collapsed && "justify-center px-0",
-              active ? "bg-brand-soft text-brand" : "text-fg-muted hover:bg-muted hover:text-fg",
-            )}
-          >
-            <item.icon className="size-[18px] shrink-0" aria-hidden />
-            <span className={cn(collapsed && "sr-only")}>{item.label}</span>
-          </Link>
-        );
-      })}
+    <nav className="flex flex-col gap-4" aria-label="Dashboard">
+      {navGroupsFor(teams).map((group) => (
+        <div key={group.label} className="flex flex-col gap-1">
+          {collapsed ? (
+            <span className="mx-auto mb-1 h-px w-6 bg-border" aria-hidden />
+          ) : (
+            <span className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-fg-muted/80">{group.label}</span>
+          )}
+          {group.items.map((item) => {
+            const active = isActive(pathname, item);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={onNavigate}
+                title={collapsed ? item.label : undefined}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors",
+                  collapsed && "justify-center px-0",
+                  active ? "bg-brand-soft text-brand" : "text-fg-muted hover:bg-muted hover:text-fg",
+                )}
+              >
+                <item.icon className="size-[18px] shrink-0" aria-hidden />
+                <span className={cn(collapsed && "sr-only")}>{item.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      ))}
     </nav>
   );
 }

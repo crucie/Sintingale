@@ -7,25 +7,9 @@ import type { MemoryLedger } from "./memory";
 const DAY = 86400;
 const hex = (bytes: number) => `0x${randomBytes(bytes).toString("hex")}`;
 
-/** Populates the in-memory ledger so the dashboard has something to show on first boot. */
-export function seedDemoData(ledger: MemoryLedger) {
-  const now = Math.floor(Date.now() / 1000);
-  const merchantId = publicConfig.merchantId;
-  const grace = serverConfig().invoiceGraceSec;
-
-  ledger.seed(
-    "merchant",
-    {
-      merchantId,
-      name: "Acme Analytics",
-      payout: "0x1f2e3d4c5b6a79880716253443526170aa9bb8c7",
-      email: "billing@acme.dev",
-    },
-    now - 30 * DAY,
-    now + 365 * DAY,
-  );
-
-  const plans: PlanAttrs[] = [
+/** The plans the `/demo` app sells. Also written to a fresh Arkiv ledger by merchant setup. */
+export function demoPlans(merchantId: string): PlanAttrs[] {
+  return [
     {
       merchantId,
       planId: "starter",
@@ -67,6 +51,27 @@ export function seedDemoData(ledger: MemoryLedger) {
       intervalSec: RECURRENCE_SECONDS["demo-5m"],
     },
   ];
+}
+
+/** Populates the in-memory ledger so the dashboard has something to show on first boot. */
+export function seedDemoData(ledger: MemoryLedger) {
+  const now = Math.floor(Date.now() / 1000);
+  const merchantId = publicConfig.merchantId;
+  const grace = serverConfig().invoiceGraceSec;
+
+  ledger.seed(
+    "merchant",
+    {
+      merchantId,
+      name: "Acme Analytics",
+      payout: "0x1f2e3d4c5b6a79880716253443526170aa9bb8c7",
+      email: "billing@acme.dev",
+    },
+    now - 30 * DAY,
+    now + 365 * DAY,
+  );
+
+  const plans = demoPlans(merchantId);
   for (const plan of plans) ledger.seed("plan", plan, now - 20 * DAY, now + 365 * DAY);
 
   const customers = [

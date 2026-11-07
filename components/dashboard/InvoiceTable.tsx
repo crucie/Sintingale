@@ -12,6 +12,7 @@ import type { InvoiceRow, InvoiceStatus } from "@/lib/types";
 import { ExpiryCountdown } from "./ExpiryCountdown";
 import { InvoiceActions } from "./InvoiceActions";
 import { InvoiceCard } from "./InvoiceCard";
+import { InvoiceTags } from "./InvoiceTags";
 import { StatusBadge } from "./StatusBadge";
 
 type Filter = "all" | InvoiceStatus;
@@ -145,6 +146,7 @@ export function InvoiceTable({
                     <td className="px-5 py-3">
                       <p className="font-mono text-xs text-fg">{invoice.invoiceId}</p>
                       <p className="text-xs text-fg-muted">{invoice.description}</p>
+                      <InvoiceTags invoice={invoice} />
                     </td>
                     <td className="max-w-48 truncate px-5 py-3 text-fg" title={invoice.customer}>
                       {invoice.customer ? shortHash(invoice.customer, 8, 6) : <span className="text-fg-muted">Any</span>}

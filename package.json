@@ -6,7 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest run",
+    "test:contracts": "cd contracts && forge test",
+    "deploy:contracts": "cd contracts && forge build && cd .. && node --env-file=.env scripts/deploy.mjs",
+    "seed": "tsx --env-file=.env scripts/seed.ts",
+    "agent": "tsx --env-file=.env scripts/agent-request.ts"
   },
   "dependencies": {
     "@arkiv-network/sdk": "^1.0.1",
@@ -35,6 +40,9 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.5",
     "tailwindcss": "^4",
-    "typescript": "^5"
-  }
+    "tsx": "^4.23.15",
+    "typescript": "^5",
+    "vitest": "^4.1.12"
+  },
+  "license": "MIT"
 }

@@ -1,6 +1,21 @@
 import { z } from "zod";
 
-export const ENTITY_TYPES = ["merchant", "plan", "invoice", "receipt", "entitlement"] as const;
+export const ENTITY_TYPES = [
+  "merchant",
+  "plan",
+  "invoice",
+  "receipt",
+  "entitlement",
+  "org",
+  "project",
+  "member",
+  "invite",
+  "inviteAccept",
+  "payout",
+  "grant",
+  "revocation",
+  "claim",
+] as const;
 export type EntityType = (typeof ENTITY_TYPES)[number];
 
 export const RECURRENCES = ["one-time", "weekly", "monthly", "yearly", "demo-5m"] as const;
@@ -30,6 +45,8 @@ export interface MerchantAttrs {
   /** Address that called `registerMerchant` on the PaymentRouter. Defaults to `payout`. */
   wallet?: string;
   email?: string;
+  /** Optional ENS teams, revenue splits and agents. Off unless the merchant turns it on. */
+  teamsEnabled?: boolean;
 }
 
 export interface PlanAttrs {
@@ -53,6 +70,12 @@ export interface InvoiceAttrs {
   dueAt: number;
   description: string;
   email?: string;
+  /** Set for project invoices; payment then settles through the ProjectSplitter. */
+  orgId?: string;
+  projectId?: string;
+  /** ENS name of the agent that created the invoice, for auditability. */
+  createdBy?: string;
+  grantId?: string;
 }
 
 export interface ReceiptAttrs {
@@ -67,6 +90,9 @@ export interface ReceiptAttrs {
   paidAt: number;
   description: string;
   simulated: boolean;
+  orgId?: string;
+  projectId?: string;
+  grantId?: string;
 }
 
 export interface EntitlementAttrs {
@@ -77,13 +103,148 @@ export interface EntitlementAttrs {
   periodEnd: number;
 }
 
+/* ---------------------------------------------------------------------------
+ * Organisations (ENS teams, splits and agents)
+ *
+ * Entities the org owner authorises carry `authSig`: an EIP-191 signature by the
+ * owner's wallet over `authMessage(type, attrs)`. See lib/arkiv/trust.ts.
+ * ------------------------------------------------------------------------- */
+
+export const ROLES = ["admin", "member"] as const;
+export type Role = (typeof ROLES)[number];
+
+export const AGENT_SCOPES = ["invoice:create"] as const;
+export type AgentScope = (typeof AGENT_SCOPES)[number];
+
+export interface OrgAttrs {
+  orgId: string;
+  ensName: string;
+  owner: string;
+  payout: string;
+  merchantId: string;
+  verifyMethod: "addr" | "text" | "demo";
+  verifiedAt: number;
+  authSig: string;
+}
+
+export interface ProjectShare {
+  subname: string;
+  account: string;
+  bps: number;
+  contribution: number;
+  resolvedAt: number;
+}
+
+export interface ProjectAttrs {
+  orgId: string;
+  projectId: string;
+  name: string;
+  description: string;
+  /** Splitter contract address, "simulated", or "" before the first share table. */
+  splitContract: string;
+  onchainId: string;
+  version: number;
+  shares: ProjectShare[];
+  updatedAt: number;
+  authSig: string;
+}
+
+export interface MemberAttrs {
+  orgId: string;
+  subname: string;
+  address: string;
+  role: Role;
+  kind: "person" | "agent";
+  inviteId: string;
+  joinedAt: number;
+  authSig: string;
+}
+
+export interface InviteAttrs {
+  orgId: string;
+  inviteId: string;
+  /** Lower-case address, or "" when anyone holding the link may accept. */
+  inviteeAddress: string;
+  label: string;
+  role: Role;
+  createdAt: number;
+  authSig: string;
+}
+
+export interface InviteAcceptAttrs {
+  orgId: string;
+  inviteId: string;
+  acceptor: string;
+  label: string;
+  acceptedAt: number;
+  /** Signed by the invitee's wallet, not the owner's. */
+  acceptSig: string;
+}
+
+export interface PayoutAttrs {
+  orgId: string;
+  projectId: string;
+  invoiceId: string;
+  account: string;
+  subname: string;
+  txHash: string;
+  amount: number;
+  shareBps: number;
+  version: number;
+  paidAt: number;
+  simulated: boolean;
+}
+
+export interface GrantAttrs {
+  orgId: string;
+  grantId: string;
+  agentName: string;
+  agentAddress: string;
+  scope: string;
+  /** "" means any project in the org. */
+  projectId: string;
+  maxAmount: number;
+  maxTotal: number;
+  createdAt: number;
+  authSig: string;
+}
+
+export interface RevocationAttrs {
+  orgId: string;
+  targetType: "grant" | "member";
+  targetId: string;
+  revokedAt: number;
+  authSig: string;
+}
+
+/** Simulated-mode claim record; on-chain claims are read from the splitter instead. */
+export interface ClaimAttrs {
+  orgId: string;
+  projectId: string;
+  account: string;
+  amount: number;
+  claimedAt: number;
+  txHash: string;
+}
+
 export interface AttrsByType {
   merchant: MerchantAttrs;
   plan: PlanAttrs;
   invoice: InvoiceAttrs;
   receipt: ReceiptAttrs;
   entitlement: EntitlementAttrs;
+  org: OrgAttrs;
+  project: ProjectAttrs;
+  member: MemberAttrs;
+  invite: InviteAttrs;
+  inviteAccept: InviteAcceptAttrs;
+  payout: PayoutAttrs;
+  grant: GrantAttrs;
+  revocation: RevocationAttrs;
+  claim: ClaimAttrs;
 }
+
+export type AuthorizedType = "org" | "project" | "member" | "invite" | "grant" | "revocation";
 
 const address = z.string().regex(/^0x[0-9a-fA-F]{40}$/, "Must be a 0x-prefixed 20-byte address");
 const slug = z
@@ -103,6 +264,7 @@ export const merchantInput = z.object({
   payout: address,
   wallet: address.optional().or(z.literal("")),
   email: z.email().optional().or(z.literal("")),
+  teamsEnabled: z.boolean().optional(),
 });
 
 export const planInput = z.object({
@@ -114,21 +276,128 @@ export const planInput = z.object({
   recurrence: z.enum(RECURRENCES),
 });
 
-export const invoiceInput = z.object({
-  merchantId: slug,
-  planId: slug,
-  amount: money.optional(),
-  currency: z.literal("USDT").default("USDT"),
-  customer: z.union([address, z.email(), z.literal("")]).optional(),
-  description: z.string().max(200).optional(),
-  dueInHours: z.number().positive().max(24 * 90).default(24),
-});
+export const invoiceInput = z
+  .object({
+    merchantId: slug,
+    planId: slug.optional(),
+    orgId: z.string().min(3).max(120).optional(),
+    projectId: slug.optional(),
+    amount: money.optional(),
+    currency: z.literal("USDT").default("USDT"),
+    customer: z.union([address, z.email(), z.literal("")]).optional(),
+    description: z.string().max(200).optional(),
+    dueInHours: z.number().positive().max(24 * 90).default(24),
+  })
+  .refine((v) => v.planId || (v.projectId && v.orgId && v.amount), {
+    message: "Give a planId, or an orgId, projectId and amount for a project invoice",
+  });
 
 export const notifyInput = z.object({
   invoiceKey: z.string().min(3).max(80),
   txHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/).optional(),
   payer: address.optional(),
   simulated: z.boolean().optional(),
+});
+
+/* --------------------------------------------------------- org entities -- */
+
+const sig = z.string().regex(/^0x[0-9a-fA-F]{130,}$/, "Missing wallet signature");
+const lowerAddress = address.transform((v) => v.toLowerCase());
+const ensName = z
+  .string()
+  .min(3)
+  .max(120)
+  .regex(/^[a-z0-9-]+(\.[a-z0-9-]+)+$/, "Enter a full ENS name such as acme.eth")
+  .transform((v) => v.toLowerCase());
+const label = z
+  .string()
+  .min(1)
+  .max(40)
+  .regex(/^[a-z0-9][a-z0-9-]*$/, "Labels use lowercase letters, numbers and dashes");
+const id = z.string().min(4).max(64).regex(/^[a-z0-9_-]+$/);
+const ts = z.number().int().positive();
+
+export const orgAttrsInput = z.object({
+  orgId: ensName,
+  ensName,
+  owner: lowerAddress,
+  payout: lowerAddress,
+  merchantId: slug,
+  verifyMethod: z.enum(["addr", "text", "demo"]),
+  verifiedAt: ts,
+  authSig: sig,
+});
+
+export const projectShareInput = z.object({
+  subname: ensName,
+  account: lowerAddress,
+  bps: z.number().int().min(1).max(10_000),
+  contribution: z.number().positive().max(1_000_000),
+  resolvedAt: ts,
+});
+
+export const projectAttrsInput = z.object({
+  orgId: ensName,
+  projectId: slug,
+  name: z.string().min(2).max(60),
+  description: z.string().max(240),
+  splitContract: z.string().max(64),
+  onchainId: z.string().regex(/^0x[0-9a-f]{64}$/),
+  version: z.number().int().min(0),
+  shares: z.array(projectShareInput).max(50),
+  updatedAt: ts,
+  authSig: sig,
+});
+
+export const inviteAttrsInput = z.object({
+  orgId: ensName,
+  inviteId: id,
+  inviteeAddress: z.union([lowerAddress, z.literal("")]),
+  label,
+  role: z.enum(ROLES),
+  createdAt: ts,
+  authSig: sig,
+});
+
+export const inviteAcceptInput = z.object({
+  orgId: ensName,
+  inviteId: id,
+  acceptor: lowerAddress,
+  label,
+  acceptedAt: ts,
+  acceptSig: sig,
+});
+
+export const memberAttrsInput = z.object({
+  orgId: ensName,
+  subname: ensName,
+  address: lowerAddress,
+  role: z.enum(ROLES),
+  kind: z.enum(["person", "agent"]),
+  inviteId: z.string().max(64),
+  joinedAt: ts,
+  authSig: sig,
+});
+
+export const grantAttrsInput = z.object({
+  orgId: ensName,
+  grantId: id,
+  agentName: ensName,
+  agentAddress: lowerAddress,
+  scope: z.string().regex(/^[a-z:]+(,[a-z:]+)*$/),
+  projectId: z.union([slug, z.literal("")]),
+  maxAmount: z.number().int().positive(),
+  maxTotal: z.number().int().positive(),
+  createdAt: ts,
+  authSig: sig,
+});
+
+export const revocationAttrsInput = z.object({
+  orgId: ensName,
+  targetType: z.enum(["grant", "member"]),
+  targetId: z.string().min(1).max(120),
+  revokedAt: ts,
+  authSig: sig,
 });
 
 export type MerchantInput = z.infer<typeof merchantInput>;

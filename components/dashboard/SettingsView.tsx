@@ -1,6 +1,7 @@
 "use client";
 
-import { Building2, Code2, KeyRound, Link2, Save, ShieldCheck } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Building2, Code2, KeyRound, Link2, Save, ShieldCheck, Users } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useConfig, useConnection, useWriteContract } from "wagmi";
@@ -11,9 +12,10 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Field, Input } from "@/components/ui/Field";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Switch } from "@/components/ui/Switch";
 import { ConnectButton } from "@/components/wallet/ConnectButton";
 import { NetworkGuard } from "@/components/wallet/NetworkGuard";
-import { useMerchant, useSaveMerchant } from "@/lib/client/hooks";
+import { ApiError, useMerchant, useSaveMerchant, useSetupMerchant } from "@/lib/client/hooks";
 import { onchainEnabled, publicConfig } from "@/lib/config";
 import { paymentRouterAbi, whitechain } from "@/lib/whitechain";
 import type { MerchantDTO } from "@/lib/types";
@@ -70,6 +72,129 @@ function ProfileForm({ merchant }: { merchant: MerchantDTO }) {
         </Button>
       </div>
     </form>
+  );
+}
+
+function SetupForm() {
+  const setup = useSetupMerchant();
+  const { address } = useConnection();
+  const [name, setName] = useState("");
+  const [payout, setPayout] = useState("");
+  const [wallet, setWallet] = useState("");
+  const [email, setEmail] = useState("");
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    try {
+      const { plansCreated } = await setup.mutateAsync({
+        merchantId: publicConfig.merchantId,
+        name,
+        payout: payout || address || "",
+        wallet: wallet || address || "",
+        email,
+      });
+      toast.success(plansCreated.length ? `Merchant created with plans: ${plansCreated.join(", ")}` : "Merchant created");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not create the merchant");
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="grid gap-5 p-5 md:grid-cols-2">
+      <p className="text-sm text-fg-muted md:col-span-2">
+        No merchant <code className="font-mono text-xs">{publicConfig.merchantId}</code> on this ledger yet. Creating it also
+        writes the demo plans (starter, pro, team, flash) used by <code className="font-mono text-xs">/demo</code>.
+      </p>
+      <Field label="Business name" htmlFor="s-name">
+        <Input id="s-name" value={name} onChange={(e) => setName(e.target.value)} required />
+      </Field>
+      <Field label="Billing email" htmlFor="s-email">
+        <Input id="s-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+      </Field>
+      <Field label="Payout address" htmlFor="s-payout" hint="Defaults to the connected wallet.">
+        <Input
+          id="s-payout"
+          className="font-mono"
+          placeholder={address ?? "0x…"}
+          value={payout}
+          onChange={(e) => setPayout(e.target.value)}
+          required={!address}
+        />
+      </Field>
+      <Field label="Merchant wallet" htmlFor="s-wallet" hint="Must be the wallet that registers on the PaymentRouter.">
+        <Input
+          id="s-wallet"
+          className="font-mono"
+          placeholder={address ?? "0x…"}
+          value={wallet}
+          onChange={(e) => setWallet(e.target.value)}
+        />
+      </Field>
+      <div className="flex flex-wrap items-center gap-3 md:col-span-2">
+        <Button type="submit" loading={setup.isPending} icon={<Save className="size-4" />}>
+          Create merchant
+        </Button>
+        {!address ? <ConnectButton /> : null}
+      </div>
+    </form>
+  );
+}
+
+const TEAM_FEATURES = [
+  "Link an ENS name so checkout shows a verified business name",
+  "Invite teammates, who get subnames like alice.yourname.eth",
+  "Split project payments by each member's contribution",
+  "Authorise agents with time-boxed, capped permissions",
+];
+
+function TeamsToggle({ merchant }: { merchant: MerchantDTO }) {
+  const qc = useQueryClient();
+  const save = useSaveMerchant();
+  const enabled = merchant.teamsEnabled === true;
+
+  async function toggle(next: boolean) {
+    try {
+      await save.mutateAsync({
+        merchantId: merchant.merchantId,
+        name: merchant.name,
+        payout: merchant.payout,
+        wallet: merchant.wallet ?? "",
+        email: merchant.email ?? "",
+        teamsEnabled: next,
+      });
+      await qc.invalidateQueries();
+      toast.success(next ? "Teams & ENS turned on" : "Teams & ENS turned off. Checkout no longer looks up ENS.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not update the setting");
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-5 p-5 md:flex-row md:items-start md:justify-between">
+      <div className="max-w-2xl text-sm">
+        <p className="font-medium text-fg">{enabled ? "On" : "Off (default)"}</p>
+        <p className="mt-1 text-fg-muted">
+          {enabled
+            ? "Team pages are in the sidebar. Customers paying a linked organisation see its verified ENS name."
+            : "Products, invoices, checkout links and receipts work as usual. Turn this on to add:"}
+        </p>
+        {!enabled ? (
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-fg-muted">
+            {TEAM_FEATURES.map((f) => (
+              <li key={f}>{f}</li>
+            ))}
+          </ul>
+        ) : null}
+        <p className="mt-3 text-xs text-fg-muted">
+          Uses Ethereum Sepolia for ENS lookups only. Payments always stay on Whitechain. Turning it off hides team features without
+          deleting any records.
+        </p>
+      </div>
+      <label htmlFor="teams-toggle" className="flex items-center gap-3">
+        <span className="text-sm font-medium text-fg">Enable Teams &amp; ENS</span>
+        <Switch id="teams-toggle" checked={enabled} onChange={toggle} loading={save.isPending} label="Enable Teams and ENS" />
+      </label>
+    </div>
   );
 }
 
@@ -131,6 +256,7 @@ export function SettingsView({
   ledger: "memory" | "arkiv";
 }) {
   const merchant = useMerchant();
+  const merchantMissing = merchant.error instanceof ApiError && merchant.error.status === 404;
   const curl = `curl "$SINTINGALE_URL/api/access?merchantId=${publicConfig.merchantId}&planId=pro&customer=0x…" \\
   -H "x-api-key: ${apiKeyIsDemo ? apiKey : "$SINTINGALE_API_KEY"}"`;
 
@@ -140,7 +266,21 @@ export function SettingsView({
       <div className="grid gap-6 xl:grid-cols-2">
         <Card className="xl:col-span-2">
           <CardHeader title={<span className="inline-flex items-center gap-2"><Building2 className="size-4 text-brand" /> Merchant profile</span>} description="Stored as a merchant entity; the latest version wins." />
-          {merchant.data ? <ProfileForm key={merchant.data.key} merchant={merchant.data} /> : <Skeleton className="m-5 h-48" />}
+          {merchant.data ? (
+            <ProfileForm key={merchant.data.key} merchant={merchant.data} />
+          ) : merchantMissing ? (
+            <SetupForm />
+          ) : (
+            <Skeleton className="m-5 h-48" />
+          )}
+        </Card>
+
+        <Card className="xl:col-span-2">
+          <CardHeader
+            title={<span className="inline-flex items-center gap-2"><Users className="size-4 text-brand" /> Teams &amp; ENS</span>}
+            description="Optional. Everything else in Sintingale works without it."
+          />
+          {merchant.data ? <TeamsToggle merchant={merchant.data} /> : <Skeleton className="m-5 h-24" />}
         </Card>
 
         <Card>
