@@ -19,20 +19,8 @@ import { OrgGate } from "./OrgGate";
 function Approval({ org, invite }: { org: OrgDTO; invite: InviteDTO }) {
   const qc = useQueryClient();
   const sign = useSigner();
-  const [busy, setBusy] = useState<"issue" | "approve" | null>(null);
+  const [busy, setBusy] = useState<"approve" | null>(null);
   const ins = invite.instructions!;
-
-  async function issueDemo() {
-    setBusy("issue");
-    try {
-      await orgActions.issueSubname(org.orgId, invite.label, invite.acceptor!);
-      toast.success(`${ins.name} issued in the demo registry`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not issue subname");
-    } finally {
-      setBusy(null);
-    }
-  }
 
   async function approve() {
     setBusy("approve");
@@ -65,15 +53,9 @@ function Approval({ org, invite }: { org: OrgDTO; invite: InviteDTO }) {
         ))}
       </ol>
       <div className="flex flex-wrap gap-2">
-        {ins.demo ? (
-          <Button size="sm" variant="outline" loading={busy === "issue"} onClick={issueDemo}>
-            Issue demo subname
-          </Button>
-        ) : (
-          <ButtonLink href={ins.ensAppUrl!} target="_blank" size="sm" variant="outline" icon={<ArrowUpRight className="size-4" aria-hidden />}>
-            Open ENS app (Sepolia)
-          </ButtonLink>
-        )}
+        <ButtonLink href={ins.ensAppUrl} target="_blank" size="sm" variant="outline" icon={<ArrowUpRight className="size-4" aria-hidden />}>
+          Open ENS app (Sepolia)
+        </ButtonLink>
         <Button size="sm" loading={busy === "approve"} onClick={approve} icon={<ShieldCheck className="size-4" />}>
           Check & approve
         </Button>
@@ -109,7 +91,7 @@ function MemberRow({ org, member }: { org: OrgDTO; member: MemberDTO }) {
   return (
     <li className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0">
-        <EnsBadge name={member.subname} address={member.currentAddress} verified={member.addressMatches} demo={member.demo} />
+        <EnsBadge name={member.subname} address={member.currentAddress} verified={member.addressMatches} />
         <p className="mt-1 pl-11 text-xs text-fg-muted">
           {member.kind === "agent" ? (
             <span className="inline-flex items-center gap-1">

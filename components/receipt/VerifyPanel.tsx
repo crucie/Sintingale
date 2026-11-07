@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, CircleSlash, ExternalLink, FlaskConical, Printer, RefreshCw, ShieldCheck, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CircleSlash, ExternalLink, Printer, RefreshCw, ShieldCheck, XCircle } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
@@ -24,12 +24,6 @@ const verdicts: Record<VerifyResult["verdict"], { title: string; body: string; t
     body: "The Arkiv receipt matches a Paid event on Whitechain.",
     tone: "border-success/30 bg-success-soft text-success",
     icon: <ShieldCheck className="size-6" aria-hidden />,
-  },
-  simulated: {
-    title: "Simulated payment",
-    body: "The receipt is genuine, but it records a demo payment with no on-chain transaction.",
-    tone: "border-brand/30 bg-brand-soft text-brand",
-    icon: <FlaskConical className="size-6" aria-hidden />,
   },
   mismatch: {
     title: "Verification failed",
@@ -140,7 +134,7 @@ function Body({ data }: { data: VerifyResult }) {
           <Detail label="Written by" value={receipt.creator} mono copy />
         </dl>
 
-        {!receipt.simulated ? (
+        {receipt.txHash ? (
           <a
             href={explorerTx(receipt.txHash)}
             target="_blank"

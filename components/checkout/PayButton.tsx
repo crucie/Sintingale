@@ -17,7 +17,6 @@ export type PaymentPhase = "ready" | "awaiting-wallet" | "confirming" | "success
 interface Result {
   txHash: string;
   receiptKey: string;
-  simulated: boolean;
 }
 
 type StepId = "approve" | "pay" | "record";
@@ -30,8 +29,6 @@ const errMessage = (err: unknown) => {
   }
   return "Payment failed";
 };
-const randomHex = (bytes: number) =>
-  `0x${Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (b) => b.toString(16).padStart(2, "0")).join("")}`;
 
 /** approve → pay → relayer receipt, as an explicit state machine the UI can render step by step. */
 export function usePayment(data: CheckoutData | undefined, invoiceKey: string) {
@@ -53,7 +50,7 @@ export function usePayment(data: CheckoutData | undefined, invoiceKey: string) {
     setSteps((s) => ({ ...s, [id]: { state, detail: detail ?? s[id].detail } }));
 
   const notify = useCallback(
-    async (body: { txHash?: string; payer?: string; simulated?: boolean }) => {
+    async (body: { txHash: string; payer: string }) => {
       for (let attempt = 0; attempt < 8; attempt++) {
         try {
           return await api<{ receiptKey: string; txHash: string }>("/api/payments/notify", {
@@ -80,23 +77,7 @@ export function usePayment(data: CheckoutData | undefined, invoiceKey: string) {
     try {
       if (data.identity.mismatch) throw new Error("Payment blocked: the seller's ENS name no longer points at its payout address.");
       if (!(isProject ? splitterEnabled : onchainEnabled)) {
-        setPhase("awaiting-wallet");
-        mark("approve", "active", "Simulated approval");
-        await sleep(700);
-        mark("approve", "done");
-        current = "pay";
-        mark("pay", "active", isProject ? "Simulated payProjectInvoice()" : "Simulated payInvoice()");
-        setPhase("confirming");
-        await sleep(1000);
-        mark("pay", "done");
-        current = "record";
-        mark("record", "active", isProject ? "Relayer writing receipt + payouts" : "Relayer writing receipt + entitlement");
-        const res = await notify({ simulated: true, payer: address ?? randomHex(20), txHash: randomHex(32) });
-        mark("record", "done", `Receipt ${res.receiptKey.slice(0, 10)}…`);
-        setResult({ ...res, simulated: true });
-        setPhase("success");
-        qc.invalidateQueries({ queryKey: ["checkout", invoiceKey] });
-        return;
+        throw new Error("Payments are not configured on this deployment. Contact the merchant.");
       }
 
       if (!address) throw new Error("Connect a wallet first.");
@@ -166,7 +147,7 @@ export function usePayment(data: CheckoutData | undefined, invoiceKey: string) {
       mark("record", "active", isProject ? "Relayer verifying the Credited events" : "Relayer verifying the Paid event");
       const res = await notify({ txHash: payHash, payer: address });
       mark("record", "done", `Receipt ${res.receiptKey.slice(0, 10)}…`);
-      setResult({ ...res, simulated: false });
+      setResult(res);
       setPhase("success");
       qc.invalidateQueries({ queryKey: ["checkout", invoiceKey] });
     } catch (err) {

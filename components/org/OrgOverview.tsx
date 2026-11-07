@@ -16,7 +16,6 @@ import { SessionGate } from "./OrgGate";
 const METHOD: Record<OrgDTO["verifyMethod"], string> = {
   addr: "The name's ETH address is your wallet",
   text: "The name's sintingale.owner text record names your wallet",
-  demo: "Local demo identity",
 };
 
 function Overview({ org }: { org: OrgDTO }) {
@@ -49,17 +48,15 @@ function Overview({ org }: { org: OrgDTO }) {
 
       <Card className="p-6">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-          <EnsBadge name={org.ensName} address={org.resolvedAddress} avatar={org.avatar} verified={org.payoutMatches} demo={org.demo} size="lg" />
-          {!org.demo ? (
-            <ButtonLink
-              href={`${publicConfig.sepolia.ensAppUrl}/${org.ensName}`}
-              target="_blank"
-              variant="outline"
-              icon={<ArrowUpRight className="size-4" aria-hidden />}
-            >
-              Open in ENS app
-            </ButtonLink>
-          ) : null}
+          <EnsBadge name={org.ensName} address={org.resolvedAddress} avatar={org.avatar} verified={org.payoutMatches} size="lg" />
+          <ButtonLink
+            href={`${publicConfig.sepolia.ensAppUrl}/${org.ensName}`}
+            target="_blank"
+            variant="outline"
+            icon={<ArrowUpRight className="size-4" aria-hidden />}
+          >
+            Open in ENS app
+          </ButtonLink>
         </div>
         <dl className="mt-6 grid gap-4 text-sm sm:grid-cols-2">
           <div>
@@ -102,23 +99,21 @@ function Overview({ org }: { org: OrgDTO }) {
         ))}
       </div>
 
-      {!org.demo ? (
-        <Card className="mt-6">
-          <CardHeader
-            title={<span className="inline-flex items-center gap-2"><Link2 className="size-4 text-brand" /> Optional: reverse verification</span>}
-            description="Point your name back at this org so anyone can check the link both ways."
-          />
-          <div className="space-y-2 p-5 text-sm text-fg-muted">
-            <p>
-              In the ENS app, add a text record <code className="font-mono text-fg">sintingale.org</code> with this value:
-            </p>
-            <div className="flex items-center gap-2 rounded-xl border border-border bg-muted px-3 py-2">
-              <code className="min-w-0 flex-1 truncate font-mono text-xs text-fg">{org.key}</code>
-              <CopyButton value={org.key} label="Copy org key" />
-            </div>
+      <Card className="mt-6">
+        <CardHeader
+          title={<span className="inline-flex items-center gap-2"><Link2 className="size-4 text-brand" /> Optional: reverse verification</span>}
+          description="Point your name back at this org so anyone can check the link both ways."
+        />
+        <div className="space-y-2 p-5 text-sm text-fg-muted">
+          <p>
+            In the ENS app, add a text record <code className="font-mono text-fg">sintingale.org</code> with this value:
+          </p>
+          <div className="flex items-center gap-2 rounded-xl border border-border bg-muted px-3 py-2">
+            <code className="min-w-0 flex-1 truncate font-mono text-xs text-fg">{org.key}</code>
+            <CopyButton value={org.key} label="Copy org key" />
           </div>
-        </Card>
-      ) : null}
+        </div>
+      </Card>
     </>
   );
 }

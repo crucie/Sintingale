@@ -19,7 +19,7 @@ import { orgActions, useMembers, useProject, useSigner } from "@/lib/client/org"
 import { publicConfig, splitterEnabled } from "@/lib/config";
 import { cn, shortHash } from "@/lib/format";
 import { contributionsToBps, formatBps, validateShares } from "@/lib/splits";
-import type { OrgDTO, ProjectDTO, SessionDTO } from "@/lib/types";
+import type { OrgDTO, ProjectDTO } from "@/lib/types";
 import { explorerTx, whitechain } from "@/lib/whitechain";
 import { OrgGate } from "./OrgGate";
 
@@ -40,7 +40,7 @@ type Phase = "edit" | "resolving" | "confirm" | "chain" | "signing";
 
 const nowSec = () => Math.floor(Date.now() / 1000);
 
-function Editor({ org, session, project }: { org: OrgDTO; session: SessionDTO; project: ProjectDTO }) {
+function Editor({ org, project }: { org: OrgDTO; project: ProjectDTO }) {
   const router = useRouter();
   const qc = useQueryClient();
   const sign = useSigner();
@@ -96,22 +96,19 @@ function Editor({ org, session, project }: { org: OrgDTO; session: SessionDTO; p
     if (!resolved || shareError) return;
     try {
       const version = project.version + 1;
-      let splitContract = "simulated";
-      if (splitterEnabled) {
-        if (session.demo) throw new Error("Demo identities cannot send Whitechain transactions. Sign in with a wallet.");
-        setPhase("chain");
-        const hash = await write.mutateAsync({
-          address: publicConfig.splitter!,
-          abi: splitterAbi,
-          functionName: project.splitContract.startsWith("0x") ? "updateShares" : "createProject",
-          args: [project.onchainId as Hex, shares.map((s) => ({ account: s.account as Hex, bps: s.bps }))],
-          chainId: whitechain.id,
-        });
-        setTxHash(hash);
-        const receipt = await waitForTransactionReceipt(config, { hash, chainId: whitechain.id });
-        if (receipt.status !== "success") throw new Error("The share update reverted on Whitechain.");
-        splitContract = publicConfig.splitter!.toLowerCase();
-      }
+      if (!splitterEnabled) throw new Error("The ProjectSplitter is not configured on this deployment.");
+      setPhase("chain");
+      const hash = await write.mutateAsync({
+        address: publicConfig.splitter!,
+        abi: splitterAbi,
+        functionName: project.splitContract.startsWith("0x") ? "updateShares" : "createProject",
+        args: [project.onchainId as Hex, shares.map((s) => ({ account: s.account as Hex, bps: s.bps }))],
+        chainId: whitechain.id,
+      });
+      setTxHash(hash);
+      const receipt = await waitForTransactionReceipt(config, { hash, chainId: whitechain.id });
+      if (receipt.status !== "success") throw new Error("The share update reverted on Whitechain.");
+      const splitContract = publicConfig.splitter!.toLowerCase();
       setPhase("signing");
       await orgActions.saveShares(sign, {
         orgId: org.orgId,
@@ -230,20 +227,16 @@ function Editor({ org, session, project }: { org: OrgDTO; session: SessionDTO; p
             <p className="text-sm text-fg-muted">
               {splitterEnabled
                 ? `Saving sends ${project.splitContract.startsWith("0x") ? "updateShares" : "createProject"} to the ProjectSplitter on ${whitechain.name}, then you sign version ${project.version + 1}. Past payouts are never recalculated.`
-                : `Simulated settlement: you sign version ${project.version + 1}. Past payouts are never recalculated.`}
+                : "Project splits are unavailable: NEXT_PUBLIC_SPLITTER_ADDRESS is not configured."}
             </p>
             {txHash ? (
               <a href={explorerTx(txHash)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-mono text-xs text-brand hover:underline">
                 {phase === "chain" ? <Loader2 className="size-3 animate-spin" aria-hidden /> : <CheckCircle2 className="size-3" aria-hidden />} {shortHash(txHash, 10, 8)}
               </a>
             ) : null}
-            {splitterEnabled && !session.demo ? (
-              <NetworkGuard action="Share tables">
-                <SaveButton phase={phase} disabled={Boolean(unresolved.length || shareError)} onClick={save} />
-              </NetworkGuard>
-            ) : (
-              <SaveButton phase={phase} disabled={Boolean(unresolved.length || shareError)} onClick={save} />
-            )}
+            <NetworkGuard action="Share tables">
+              <SaveButton phase={phase} disabled={Boolean(!splitterEnabled || unresolved.length || shareError)} onClick={save} />
+            </NetworkGuard>
           </div>
         </Card>
       ) : null}
@@ -259,7 +252,7 @@ function SaveButton({ phase, disabled, onClick }: { phase: Phase; disabled: bool
   );
 }
 
-function Loader({ org, session, projectId }: { org: OrgDTO; session: SessionDTO; projectId: string }) {
+function Loader({ org, projectId }: { org: OrgDTO; projectId: string }) {
   const project = useProject(org.orgId, projectId);
   if (project.isLoading) return <Skeleton className="h-72 w-full" />;
   if (!project.data) return <Card className="p-6 text-sm text-fg-muted">Project not found.</Card>;
@@ -270,11 +263,11 @@ function Loader({ org, session, projectId }: { org: OrgDTO; session: SessionDTO;
         description="Contribution decides the share of every future payment to this project."
         action={<ButtonLink href={`/dashboard/projects/${projectId}`} variant="outline">Back to project</ButtonLink>}
       />
-      <Editor org={org} session={session} project={project.data} />
+      <Editor org={org} project={project.data} />
     </>
   );
 }
 
 export function ShareEditorPage({ projectId }: { projectId: string }) {
-  return <OrgGate>{({ org, session }) => <Loader org={org} session={session} projectId={projectId} />}</OrgGate>;
+  return <OrgGate>{({ org }) => <Loader org={org} projectId={projectId} />}</OrgGate>;
 }

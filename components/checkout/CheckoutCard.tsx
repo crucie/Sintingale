@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   Clock,
   ExternalLink,
-  FlaskConical,
   Hourglass,
   Lock,
   PieChart,
@@ -111,7 +110,7 @@ export function CheckoutCard({ invoiceKey }: { invoiceKey: string }) {
   const { invoice, merchant, plan, identity, project } = data;
   const isExpiredLocally = invoice.status === "pending" && now !== null && invoice.expiresAt !== null && invoice.expiresAt * 1000 <= now;
   const result = payment.result ?? (invoice.status === "paid" && invoice.txHash && invoice.receiptKey
-    ? { txHash: invoice.txHash, receiptKey: invoice.receiptKey, simulated: Boolean(invoice.simulated) }
+    ? { txHash: invoice.txHash, receiptKey: invoice.receiptKey }
     : null);
   const isPaid = payment.phase === "success" || invoice.status === "paid";
   const lockedCustomer = invoice.customer && invoice.customer.startsWith("0x") ? invoice.customer : null;
@@ -123,7 +122,7 @@ export function CheckoutCard({ invoiceKey }: { invoiceKey: string }) {
         <div className="min-w-0">
           <p className="mb-1 text-xs text-fg-muted">Paying</p>
           {identity.ensName ? (
-            <EnsBadge name={identity.ensName} address={identity.resolvedAddress} avatar={identity.avatar} verified={identity.verified} demo={identity.demo} />
+            <EnsBadge name={identity.ensName} address={identity.resolvedAddress} avatar={identity.avatar} verified={identity.verified} />
           ) : (
             <div className="flex items-center gap-3">
               <span className="grid size-9 place-items-center rounded-xl bg-brand font-display font-bold text-brand-fg">
@@ -193,20 +192,14 @@ export function CheckoutCard({ invoiceKey }: { invoiceKey: string }) {
               <CopyButton value={result.txHash} label="Copy tx hash" toastMessage="Tx hash copied" />
             </dd>
           </div>
-          {result.simulated ? (
-            <p className="flex items-center gap-1.5 rounded-xl bg-muted px-3 py-2 text-xs text-fg-muted">
-              <FlaskConical className="size-3.5 shrink-0" aria-hidden /> Simulated payment: no funds moved on Whitechain.
-            </p>
-          ) : (
-            <a
-              href={explorerTx(result.txHash)}
-              target="_blank"
-              rel="noreferrer"
-              className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-border text-sm font-medium text-fg hover:bg-muted"
-            >
-              View on Whitechain explorer <ExternalLink className="size-4" aria-hidden />
-            </a>
-          )}
+          <a
+            href={explorerTx(result.txHash)}
+            target="_blank"
+            rel="noreferrer"
+            className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-border text-sm font-medium text-fg hover:bg-muted"
+          >
+            View on Whitechain explorer <ExternalLink className="size-4" aria-hidden />
+          </a>
         </dl>
         {payment.phase === "success" ? (
           <div className="mt-6">
@@ -235,6 +228,10 @@ export function CheckoutCard({ invoiceKey }: { invoiceKey: string }) {
     <Button size="lg" className="w-full" disabled variant="danger" icon={<ShieldAlert className="size-4" />}>
       Payment blocked
     </Button>
+  ) : !chainMode ? (
+    <Button size="lg" className="w-full" disabled variant="outline" icon={<ShieldAlert className="size-4" />}>
+      Payments unavailable
+    </Button>
   ) : payment.phase === "error" ? (
       <Button size="lg" className="w-full" onClick={payment.reset} icon={<RotateCcw className="size-4" />}>
         Try again
@@ -248,13 +245,13 @@ export function CheckoutCard({ invoiceKey }: { invoiceKey: string }) {
           className="w-full"
           loading={busy}
           onClick={payment.pay}
-          icon={chainMode ? <Wallet className="size-4" /> : <FlaskConical className="size-4" />}
+          icon={<Wallet className="size-4" />}
         >
           {busy
             ? payment.phase === "awaiting-wallet"
               ? "Confirm in wallet…"
               : "Confirming…"
-            : `Pay ${formatUsdt(invoice.amount)}${chainMode ? "" : " (simulated)"}`}
+            : `Pay ${formatUsdt(invoice.amount)}`}
         </Button>
       </NetworkGuard>
     );
@@ -320,9 +317,9 @@ export function CheckoutCard({ invoiceKey }: { invoiceKey: string }) {
       ) : null}
 
       {!chainMode ? (
-        <p className="mt-3 flex items-start gap-2 rounded-xl border border-border px-3 py-2 text-xs text-fg-muted">
-          <FlaskConical className="mt-0.5 size-3.5 shrink-0 text-brand" aria-hidden />
-          Demo mode: contracts are not configured, so payment is simulated end to end. The receipt and entitlement are still written to the ledger.
+        <p className="mt-3 flex items-start gap-2 rounded-xl border border-danger/40 bg-danger-soft px-3 py-2 text-xs text-fg">
+          <ShieldAlert className="mt-0.5 size-3.5 shrink-0 text-danger" aria-hidden />
+          This deployment has no payment contracts configured, so this invoice cannot be paid yet.
         </p>
       ) : null}
 

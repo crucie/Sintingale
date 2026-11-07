@@ -18,7 +18,7 @@ import { formatDate, formatUsdt, toBaseUnits } from "@/lib/format";
 import { RECURRENCE_LABEL } from "@/lib/schema";
 
 const DUE_OPTIONS = [
-  { hours: 2 / 60, label: "2 minutes (expiry demo)" },
+  { hours: 2 / 60, label: "2 minutes" },
   { hours: 1, label: "1 hour" },
   { hours: 24, label: "24 hours" },
   { hours: 72, label: "3 days" },

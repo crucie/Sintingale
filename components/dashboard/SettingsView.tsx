@@ -86,14 +86,14 @@ function SetupForm() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     try {
-      const { plansCreated } = await setup.mutateAsync({
+      await setup.mutateAsync({
         merchantId: publicConfig.merchantId,
         name,
         payout: payout || address || "",
         wallet: wallet || address || "",
         email,
       });
-      toast.success(plansCreated.length ? `Merchant created with plans: ${plansCreated.join(", ")}` : "Merchant created");
+      toast.success("Merchant created on Arkiv. Next: register your payout on the PaymentRouter, then add plans.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not create the merchant");
     }
@@ -102,8 +102,8 @@ function SetupForm() {
   return (
     <form onSubmit={onSubmit} className="grid gap-5 p-5 md:grid-cols-2">
       <p className="text-sm text-fg-muted md:col-span-2">
-        No merchant <code className="font-mono text-xs">{publicConfig.merchantId}</code> on this ledger yet. Creating it also
-        writes the demo plans (starter, pro, team, flash) used by <code className="font-mono text-xs">/demo</code>.
+        No merchant <code className="font-mono text-xs">{publicConfig.merchantId}</code> exists on Arkiv yet. Create it, then add
+        your plans on the Products page.
       </p>
       <Field label="Business name" htmlFor="s-name">
         <Input id="s-name" value={name} onChange={(e) => setName(e.target.value)} required />
@@ -206,10 +206,9 @@ function RegisterOnchain({ payout }: { payout: string }) {
 
   if (!onchainEnabled) {
     return (
-      <p className="text-sm text-fg-muted">
-        Set <code className="font-mono text-xs">NEXT_PUBLIC_PAYMENT_ROUTER_ADDRESS</code> and{" "}
-        <code className="font-mono text-xs">NEXT_PUBLIC_USDT_ADDRESS</code> to enable on-chain settlement. Until then,
-        checkout runs a clearly labelled simulation.
+      <p className="text-sm text-danger">
+        Payments are disabled: set <code className="font-mono text-xs">NEXT_PUBLIC_PAYMENT_ROUTER_ADDRESS</code> and{" "}
+        <code className="font-mono text-xs">NEXT_PUBLIC_USDT_ADDRESS</code> and redeploy.
       </p>
     );
   }
@@ -244,21 +243,11 @@ function RegisterOnchain({ payout }: { payout: string }) {
   );
 }
 
-export function SettingsView({
-  apiKey,
-  apiKeyIsDemo,
-  relayer,
-  ledger,
-}: {
-  apiKey: string;
-  apiKeyIsDemo: boolean;
-  relayer: string;
-  ledger: "memory" | "arkiv";
-}) {
+export function SettingsView({ apiKeyHint, relayer }: { apiKeyHint: string; relayer: string }) {
   const merchant = useMerchant();
   const merchantMissing = merchant.error instanceof ApiError && merchant.error.status === 404;
-  const curl = `curl "$SINTINGALE_URL/api/access?merchantId=${publicConfig.merchantId}&planId=pro&customer=0x…" \\
-  -H "x-api-key: ${apiKeyIsDemo ? apiKey : "$SINTINGALE_API_KEY"}"`;
+  const curl = `curl "$SINTINGALE_URL/api/access?merchantId=${publicConfig.merchantId}&planId=PLAN_ID&customer=0x…" \\
+  -H "x-api-key: $SINTINGALE_API_KEY"`;
 
   return (
     <>
@@ -287,14 +276,9 @@ export function SettingsView({
           <CardHeader title={<span className="inline-flex items-center gap-2"><KeyRound className="size-4 text-brand" /> API key</span>} description="For server-to-server calls from your SaaS backend." />
           <div className="space-y-4 p-5">
             <div className="flex items-center gap-2 rounded-xl border border-border bg-muted px-3 py-2">
-              <code className="min-w-0 flex-1 truncate font-mono text-sm text-fg">{apiKey}</code>
-              {apiKeyIsDemo ? <CopyButton value={apiKey} label="Copy API key" toastMessage="API key copied" /> : null}
+              <code className="min-w-0 flex-1 truncate font-mono text-sm text-fg">{apiKeyHint}</code>
             </div>
-            <p className="text-xs text-fg-muted">
-              {apiKeyIsDemo
-                ? "This is the public demo key. Set SINTINGALE_API_KEY to use your own."
-                : "Configured through SINTINGALE_API_KEY. Only the prefix and suffix are shown."}
-            </p>
+            <p className="text-xs text-fg-muted">Configured through SINTINGALE_API_KEY. Only the prefix and suffix are shown.</p>
             <div>
               <p className="mb-2 flex items-center gap-1.5 text-sm font-medium text-fg">
                 <Code2 className="size-4" aria-hidden /> Check access from your backend
@@ -310,7 +294,7 @@ export function SettingsView({
         <Card>
           <CardHeader title={<span className="inline-flex items-center gap-2"><Link2 className="size-4 text-brand" /> Network</span>} description="Money moves on Whitechain. State lives on Arkiv." />
           <dl className="divide-y divide-border px-5">
-            <Row label="Ledger backend" value={ledger === "arkiv" ? "Arkiv testnet (Rabdi)" : "In-memory Arkiv emulator"} mono={false} />
+            <Row label="Ledger" value="Arkiv testnet (Rabdi)" mono={false} />
             <Row label="Trusted relayer ($creator)" value={relayer} />
             <Row label="Settlement chain" value={`${whitechain.name} · ${whitechain.id}`} mono={false} />
             <Row label="PaymentRouter" value={publicConfig.paymentRouter ?? "Not configured"} />

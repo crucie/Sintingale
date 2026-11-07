@@ -7,7 +7,6 @@ import { createSiweMessage } from "viem/siwe";
 import { acceptMessage, authMessage } from "../arkiv/messages";
 import { projectIdToBytes32 } from "../chain/splitter";
 import { publicConfig } from "../config";
-import type { DemoRole } from "../demo";
 import type {
   AttrsByType,
   AuthorizedType,
@@ -50,12 +49,12 @@ export function useTeamsEnabled(): boolean | undefined {
 export function useSession() {
   return useQuery({
     queryKey: ["session"],
-    queryFn: () => api<{ session: SessionDTO | null; demoAvailable: boolean }>("/api/auth/session"),
+    queryFn: () => api<{ session: SessionDTO | null }>("/api/auth/session"),
     staleTime: 10_000,
   });
 }
 
-/** Sign-In with Ethereum, or a seeded demo identity on the local ledger. */
+/** Sign-In with Ethereum (EIP-4361). */
 export function useSignIn() {
   const qc = useQueryClient();
   const { address, chainId } = useConnection();
@@ -83,23 +82,15 @@ export function useSignIn() {
     onSuccess: () => qc.invalidateQueries(),
   });
 
-  const asDemo = useMutation({
-    mutationFn: (role: DemoRole) => api("/api/auth/demo", { method: "POST", body: JSON.stringify({ role }) }),
-    onSuccess: () => qc.invalidateQueries(),
-  });
-
   const signOut = useMutation({
     mutationFn: () => api("/api/auth/session", { method: "DELETE" }),
     onSuccess: () => qc.invalidateQueries(),
   });
 
-  return { withWallet, asDemo, signOut };
+  return { withWallet, signOut };
 }
 
-/**
- * Signs authorisation messages as the signed-in identity: the wallet for real
- * sessions, or the server-held demo key for `.demo` sessions.
- */
+/** Signs authorisation messages with the signed-in wallet. */
 export function useSigner() {
   const { data } = useSession();
   const { address } = useConnection();
@@ -109,13 +100,6 @@ export function useSigner() {
   return useCallback(
     async (message: string): Promise<string> => {
       if (!session) throw new Error("Sign in first.");
-      if (session.demo) {
-        const { signature } = await api<{ signature: string }>("/api/demo/sign", {
-          method: "POST",
-          body: JSON.stringify({ message }),
-        });
-        return signature;
-      }
       if (!address || address.toLowerCase() !== session.address) {
         throw new Error("Switch your wallet to the signed-in account to sign.");
       }

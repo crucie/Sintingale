@@ -1,4 +1,4 @@
-import { ExternalLink, FlaskConical, Receipt } from "lucide-react";
+import { ExternalLink, Receipt } from "lucide-react";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { formatDate, formatUsdt, shortHash } from "@/lib/format";
 import { formatBps } from "@/lib/splits";
@@ -6,13 +6,6 @@ import type { PayoutDTO } from "@/lib/types";
 import { explorerTx } from "@/lib/whitechain";
 
 function TxLink({ p }: { p: PayoutDTO }) {
-  if (p.simulated) {
-    return (
-      <span className="inline-flex items-center gap-1 font-mono text-xs text-fg-muted" title="Simulated settlement">
-        <FlaskConical className="size-3.5" aria-hidden /> {shortHash(p.txHash)}
-      </span>
-    );
-  }
   return (
     <a href={explorerTx(p.txHash)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-mono text-xs text-brand hover:underline">
       {shortHash(p.txHash)} <ExternalLink className="size-3" aria-hidden />

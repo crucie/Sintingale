@@ -4,7 +4,6 @@ import { ExternalLink, Link2, MoreHorizontal, Receipt } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { onchainEnabled } from "@/lib/config";
 import type { InvoiceRow } from "@/lib/types";
 import { explorerTx } from "@/lib/whitechain";
 
@@ -61,7 +60,7 @@ export function InvoiceActions({ invoice }: { invoice: InvoiceRow }) {
               <Receipt className="size-4" aria-hidden /> View receipt
             </Link>
           ) : null}
-          {invoice.txHash && onchainEnabled && !invoice.simulated ? (
+          {invoice.txHash ? (
             <a href={explorerTx(invoice.txHash)} target="_blank" rel="noreferrer" className={item}>
               <ExternalLink className="size-4" aria-hidden /> View on explorer
             </a>

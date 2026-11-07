@@ -78,7 +78,7 @@ export function Overview() {
           <ul className="divide-y divide-border">
             {[
               { href: "/dashboard/invoices/new", icon: FilePlus2, title: "Share a checkout link", body: "Create an invoice and send the link or QR." },
-              { href: "/demo", icon: FlaskConical, title: "Try the paywalled demo", body: "See hasAccess() unlock a page after payment." },
+              { href: "/demo", icon: FlaskConical, title: "Open the example app", body: "See hasAccess() unlock a page after payment." },
               { href: "/dashboard/settings", icon: KeyRound, title: "Grab your API key", body: "Call /api/access from your backend." },
             ].map((item) => (
               <li key={item.href}>

@@ -19,7 +19,7 @@ import { SessionGate } from "./OrgGate";
 
 interface Check {
   ok: boolean;
-  method: "addr" | "text" | "demo" | null;
+  method: "addr" | "text" | null;
   name: string;
   resolvedAddress: string | null;
   textRecord: string | null;
@@ -31,7 +31,7 @@ function Flow({ session }: { session: SessionDTO }) {
   const router = useRouter();
   const qc = useQueryClient();
   const sign = useSigner();
-  const [name, setName] = useState(publicConfig.sepolia.parentNameHint || (session.demo ? "acme.demo" : ""));
+  const [name, setName] = useState(publicConfig.sepolia.parentNameHint);
   const [check, setCheck] = useState<Check | null>(null);
   const [checking, setChecking] = useState(false);
   const [linking, setLinking] = useState(false);
@@ -75,7 +75,7 @@ function Flow({ session }: { session: SessionDTO }) {
   if (session.org) {
     return (
       <Card className="p-6">
-        <EnsBadge name={session.org.ensName} address={session.org.resolvedAddress} avatar={session.org.avatar} verified={session.org.payoutMatches} demo={session.org.demo} size="lg" />
+        <EnsBadge name={session.org.ensName} address={session.org.resolvedAddress} avatar={session.org.avatar} verified={session.org.payoutMatches} size="lg" />
         <p className="mt-4 text-sm text-fg-muted">This wallet already has a linked organisation.</p>
         <ButtonLink href="/dashboard/org" className="mt-4">Go to organisation</ButtonLink>
       </Card>
@@ -96,7 +96,7 @@ function Flow({ session }: { session: SessionDTO }) {
 
         {check ? (
           <div className="mt-6 rounded-2xl border border-border p-5">
-            <EnsBadge name={check.name} address={check.resolvedAddress} avatar={check.avatar} verified={check.ok} demo={check.method === "demo"} />
+            <EnsBadge name={check.name} address={check.resolvedAddress} avatar={check.avatar} verified={check.ok} />
             <ul className="mt-4 space-y-2 text-sm">
               <li className="flex items-start gap-2">
                 {check.resolvedAddress === session.address ? (

@@ -179,12 +179,12 @@ export function useSaveMerchant() {
   });
 }
 
-/** Creates the merchant and the demo plans on an empty ledger. */
+/** Creates the merchant entity on first run. */
 export function useSetupMerchant() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: MerchantInput) =>
-      api<{ merchant: MerchantDTO; plansCreated: string[] }>("/api/setup", { method: "POST", body: JSON.stringify(input) }),
+      api<{ merchant: MerchantDTO }>("/api/setup", { method: "POST", body: JSON.stringify(input) }),
     onSuccess: () => qc.invalidateQueries(),
   });
 }

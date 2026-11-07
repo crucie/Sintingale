@@ -1,4 +1,4 @@
-import { BadgeCheck, FlaskConical, ShieldAlert } from "lucide-react";
+import { BadgeCheck, ShieldAlert } from "lucide-react";
 import { cn, shortHash } from "@/lib/format";
 
 /** Name + avatar + verified check; falls back to a short address marked "not name-verified". */
@@ -7,7 +7,6 @@ export function EnsBadge({
   address,
   avatar,
   verified,
-  demo,
   size = "md",
   className,
 }: {
@@ -15,7 +14,6 @@ export function EnsBadge({
   address: string | null;
   avatar?: string | null;
   verified: boolean;
-  demo?: boolean;
   size?: "sm" | "md" | "lg";
   className?: string;
 }) {
@@ -53,11 +51,7 @@ export function EnsBadge({
           <span className="truncate">{name}</span>
           {verified ? <BadgeCheck className="size-4 shrink-0 text-success" aria-label="ENS verified" /> : null}
         </span>
-        {demo ? (
-          <span className="inline-flex items-center gap-1 text-xs text-fg-muted">
-            <FlaskConical className="size-3.5" aria-hidden /> Demo identity, not on ENS
-          </span>
-        ) : verified ? (
+        {verified ? (
           <span className="text-xs text-success">ENS verified</span>
         ) : (
           <span className="inline-flex items-center gap-1 text-xs text-warning">

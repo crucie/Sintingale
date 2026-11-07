@@ -174,7 +174,7 @@ function Detail({ org, projectId }: { org: OrgDTO; projectId: string }) {
               ProjectSplitter {shortHash(p.splitContract)} <ExternalLink className="size-3" aria-hidden />
             </a>
           ) : (
-            <p className="mt-1 text-fg-muted">{p.splitContract === "simulated" ? "Simulated splitter (no contract configured)" : "Not set up yet"}</p>
+            <p className="mt-1 text-fg-muted">Not set up yet</p>
           )}
           <p className="mt-3 text-xs text-fg-muted">
             Payments credit each member&apos;s claimable balance; nobody is paid inside the customer&apos;s transaction. Rounding dust goes to the owner.

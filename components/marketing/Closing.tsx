@@ -81,7 +81,7 @@ export function Closing() {
           <nav className="grid grid-cols-2 gap-x-12 gap-y-3 text-base font-medium sm:grid-cols-3" aria-label="Footer">
             <Link href="/dashboard" className="hover:underline">Dashboard</Link>
             <Link href="/dashboard/invoices" className="hover:underline">Invoices</Link>
-            <Link href="/demo" className="hover:underline">Demo app</Link>
+            <Link href="/demo" className="hover:underline">Example app</Link>
             <Link href="#how" className="hover:underline">How it works</Link>
             <Link href="#developers" className="hover:underline">Developers</Link>
             <Link href="#features" className="hover:underline">Features</Link>

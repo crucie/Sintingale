@@ -15,7 +15,6 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { ConnectButton } from "@/components/wallet/ConnectButton";
 import { NetworkGuard } from "@/components/wallet/NetworkGuard";
 import { splitterAbi } from "@/lib/chain/splitter";
-import { api } from "@/lib/client/hooks";
 import { useClaimable } from "@/lib/client/org";
 import { publicConfig } from "@/lib/config";
 import { formatUsdt, shortHash } from "@/lib/format";
@@ -33,26 +32,21 @@ function ClaimPanel({ entry, session }: { entry: ClaimableDTO; session: SessionD
   const { address } = useConnection();
   const [state, setState] = useState<ClaimState>("idle");
   const [tx, setTx] = useState<string | null>(null);
-  const onchain = entry.source === "chain";
 
   async function claim() {
     setState("confirming");
     try {
-      if (onchain) {
-        const hash = await write.mutateAsync({
-          address: publicConfig.splitter!,
-          abi: splitterAbi,
-          functionName: "claim",
-          args: [entry.onchainId as Hex, publicConfig.usdt.address!],
-          chainId: whitechain.id,
-        });
-        setTx(hash);
-        const receipt = await waitForTransactionReceipt(config, { hash, chainId: whitechain.id });
-        if (receipt.status !== "success") throw new Error("Claim reverted on Whitechain.");
-      } else {
-        const res = await api<{ txHash: string }>("/api/me/claim", { method: "POST", body: JSON.stringify({ orgId: entry.orgId, projectId: entry.projectId }) });
-        setTx(res.txHash);
-      }
+      if (!publicConfig.splitter || !publicConfig.usdt.address) throw new Error("The ProjectSplitter is not configured on this deployment.");
+      const hash = await write.mutateAsync({
+        address: publicConfig.splitter,
+        abi: splitterAbi,
+        functionName: "claim",
+        args: [entry.onchainId as Hex, publicConfig.usdt.address],
+        chainId: whitechain.id,
+      });
+      setTx(hash);
+      const receipt = await waitForTransactionReceipt(config, { hash, chainId: whitechain.id });
+      if (receipt.status !== "success") throw new Error("Claim reverted on Whitechain.");
       setState("success");
       toast.success(`Claimed ${formatUsdt(entry.claimable)}`);
       qc.invalidateQueries({ queryKey: ["claimable"] });
@@ -62,10 +56,10 @@ function ClaimPanel({ entry, session }: { entry: ClaimableDTO; session: SessionD
     }
   }
 
-  const wrongWallet = onchain && address && address.toLowerCase() !== session.address;
+  const wrongWallet = address && address.toLowerCase() !== session.address;
   const button = (
     <Button onClick={claim} loading={state === "confirming"} disabled={entry.claimable <= 0 || Boolean(wrongWallet)} icon={<HandCoins className="size-4" />}>
-      {state === "confirming" ? (onchain ? "Confirm in wallet…" : "Claiming…") : `Claim ${formatUsdt(entry.claimable)}`}
+      {state === "confirming" ? "Confirm in wallet…" : `Claim ${formatUsdt(entry.claimable)}`}
     </Button>
   );
 
@@ -77,16 +71,12 @@ function ClaimPanel({ entry, session }: { entry: ClaimableDTO; session: SessionD
         </p>
         <p className="mt-1 font-display text-3xl font-bold tabular-nums text-fg">{formatUsdt(entry.claimable)}</p>
         <p className="text-xs text-fg-muted">
-          {formatUsdt(entry.credited)} credited · {formatUsdt(entry.claimed)} claimed · {onchain ? "balance read from the splitter" : "simulated settlement"}
+          {formatUsdt(entry.credited)} credited · {formatUsdt(entry.claimed)} claimed · balance read from the splitter
         </p>
         {tx ? (
-          onchain ? (
-            <a href={explorerTx(tx)} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 font-mono text-xs text-brand hover:underline">
-              {shortHash(tx)} <ExternalLink className="size-3" aria-hidden />
-            </a>
-          ) : (
-            <p className="mt-1 font-mono text-xs text-fg-muted">{shortHash(tx)} (simulated)</p>
-          )
+          <a href={explorerTx(tx)} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 font-mono text-xs text-brand hover:underline">
+            {shortHash(tx)} <ExternalLink className="size-3" aria-hidden />
+          </a>
         ) : null}
         {wrongWallet ? <p className="mt-1 text-xs text-warning">Switch your wallet to {shortHash(session.address)} to claim.</p> : null}
       </div>
@@ -94,16 +84,10 @@ function ClaimPanel({ entry, session }: { entry: ClaimableDTO; session: SessionD
         <span className="inline-flex items-center gap-1.5 text-sm font-medium text-success">
           <CheckCircle2 className="size-4" aria-hidden /> Claimed
         </span>
-      ) : onchain ? (
-        session.demo ? (
-          <p className="text-xs text-fg-muted">Demo identities cannot sign transactions.</p>
-        ) : address ? (
-          <NetworkGuard action="Claims">{button}</NetworkGuard>
-        ) : (
-          <ConnectButton />
-        )
+      ) : address ? (
+        <NetworkGuard action="Claims">{button}</NetworkGuard>
       ) : (
-        button
+        <ConnectButton />
       )}
     </div>
   );

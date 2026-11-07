@@ -14,16 +14,16 @@ import { NavLinks, SecondaryLinks } from "./Sidebar";
 function LedgerBadge() {
   const { data } = useStats();
   if (!data) return null;
-  const { ledger, onchain } = data.system;
+  const { onchain } = data.system;
   return (
     <span
       className="hidden items-center gap-1.5 rounded-full border border-border bg-bg px-3 py-1.5 text-xs text-fg-muted sm:inline-flex"
-      title={ledger === "arkiv" ? "Entities are written to the Arkiv testnet" : "Entities live in the in-memory Arkiv emulator"}
+      title="Entities are written to the Arkiv testnet; payments settle on Whitechain"
     >
       <Database className="size-3.5" aria-hidden />
-      {ledger === "arkiv" ? "Arkiv testnet" : "Local ledger"}
+      Arkiv testnet
       <span className="text-border">|</span>
-      {onchain ? "Whitechain" : "Simulated pay"}
+      {onchain ? "Whitechain" : "Payments not configured"}
     </span>
   );
 }

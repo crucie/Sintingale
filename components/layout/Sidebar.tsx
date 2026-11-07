@@ -53,9 +53,9 @@ export function SecondaryLinks({ collapsed, onNavigate }: { collapsed?: boolean;
   );
   return (
     <div className="flex flex-col gap-1">
-      <Link href="/demo" className={link} onClick={onNavigate} title={collapsed ? "Demo SaaS app" : undefined}>
+      <Link href="/demo" className={link} onClick={onNavigate} title={collapsed ? "Example SaaS app" : undefined}>
         <FlaskConical className="size-[18px] shrink-0" aria-hidden />
-        <span className={cn(collapsed && "sr-only")}>Demo SaaS app</span>
+        <span className={cn(collapsed && "sr-only")}>Example SaaS app</span>
       </Link>
       <Link href="/" className={link} onClick={onNavigate} title={collapsed ? "Website" : undefined}>
         <ExternalLink className="size-[18px] shrink-0" aria-hidden />

@@ -81,7 +81,7 @@ export function InviteLanding({ inviteKey }: { inviteKey: string }) {
             <>
               <p className="text-sm text-fg-muted">You&apos;re invited to join</p>
               <div className="mt-2">
-                <EnsBadge name={data.org.ensName} address={data.org.resolvedAddress} avatar={data.org.avatar} verified={data.org.payoutMatches} demo={data.org.demo} size="lg" />
+                <EnsBadge name={data.org.ensName} address={data.org.resolvedAddress} avatar={data.org.avatar} verified={data.org.payoutMatches} size="lg" />
               </div>
               <div className="mt-6 rounded-2xl bg-muted/70 p-4 text-sm">
                 <div className="flex items-center justify-between gap-3">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Ban, Bot, CheckCircle2, KeyRound, Play, ShieldAlert, XCircle } from "lucide-react";
+import { Ban, Bot, CheckCircle2, KeyRound } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { ExpiryCountdown } from "@/components/dashboard/ExpiryCountdown";
@@ -11,7 +11,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Field, Input, Select } from "@/components/ui/Field";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { api, ApiError, useNow } from "@/lib/client/hooks";
+import { useNow } from "@/lib/client/hooks";
 import { orgActions, randomId, useGrants, useMembers, useProjects, useSigner } from "@/lib/client/org";
 import { cn, formatUsdt, shortHash, toBaseUnits } from "@/lib/format";
 import type { GrantDTO, OrgDTO } from "@/lib/types";
@@ -147,7 +147,7 @@ function CreateGrant({ org }: { org: OrgDTO }) {
       </Field>
       <Field label="Expires after" htmlFor="g-ttl" hint="The grant entity expires; access ends with no cleanup.">
         <Select id="g-ttl" value={hours} onChange={(e) => setHours(Number(e.target.value))}>
-          <option value={0.05}>3 minutes (demo)</option>
+          <option value={0.05}>3 minutes</option>
           <option value={1}>1 hour</option>
           <option value={24}>24 hours</option>
           <option value={168}>7 days</option>
@@ -223,63 +223,6 @@ function GrantRow({ org, grant }: { org: OrgDTO; grant: GrantDTO }) {
   );
 }
 
-function DemoRunner({ org }: { org: OrgDTO }) {
-  const qc = useQueryClient();
-  const projects = useProjects(org.orgId);
-  const [amount, setAmount] = useState("10");
-  const [projectId, setProjectId] = useState("launch");
-  const [log, setLog] = useState<Array<{ ok: boolean; text: string }>>([]);
-  const run = useMutation({
-    mutationFn: (impersonate: boolean) =>
-      api<{ invoiceId: string; createdBy: string }>("/api/demo/agent", { method: "POST", body: JSON.stringify({ amount, projectId, impersonate }) }),
-    onSuccess: (r) => {
-      setLog((l) => [{ ok: true, text: `201 · ${r.createdBy} created ${r.invoiceId} for ${amount} USDT` }, ...l].slice(0, 6));
-      qc.invalidateQueries({ queryKey: ["grants"] });
-      qc.invalidateQueries({ queryKey: ["invoices"] });
-    },
-    onError: (e) => setLog((l) => [{ ok: false, text: `403 · ${e instanceof ApiError ? e.code : "ERROR"}: ${e.message}` }, ...l].slice(0, 6)),
-  });
-
-  return (
-    <div className="space-y-4 p-5">
-      <div className="grid gap-4 sm:grid-cols-[140px_1fr]">
-        <Field label="Amount (USDT)" htmlFor="d-amt">
-          <Input id="d-amt" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
-        </Field>
-        <Field label="Project" htmlFor="d-proj">
-          <Select id="d-proj" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-            {projects.data?.map((p) => (
-              <option key={p.projectId} value={p.projectId}>
-                {p.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Button loading={run.isPending && run.variables === false} onClick={() => run.mutate(false)} icon={<Play className="size-4" />}>
-          Send as billing-bot.acme.demo
-        </Button>
-        <Button variant="outline" loading={run.isPending && run.variables === true} onClick={() => run.mutate(true)} icon={<ShieldAlert className="size-4" />}>
-          Send with a different key
-        </Button>
-      </div>
-      {log.length ? (
-        <ul className="space-y-1.5 rounded-xl bg-[#1d1410] p-3 font-mono text-xs">
-          {log.map((l, i) => (
-            <li key={i} className={cn("flex gap-2", l.ok ? "text-[#9be7b0]" : "text-[#ffb4a1]")}>
-              {l.ok ? <CheckCircle2 className="size-3.5 shrink-0" aria-hidden /> : <XCircle className="size-3.5 shrink-0" aria-hidden />}
-              {l.text}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-xs text-fg-muted">Try 10, then 30 (over the per-invoice cap), then keep going until the total cap is hit.</p>
-      )}
-    </div>
-  );
-}
-
 function Agents({ org }: { org: OrgDTO }) {
   const grants = useGrants(org.orgId);
   return (
@@ -314,12 +257,6 @@ function Agents({ org }: { org: OrgDTO }) {
           </Card>
         </div>
       </div>
-      {org.demo ? (
-        <Card className="mt-6">
-          <CardHeader title="Try it: signed agent requests" description="Each click signs a real request and sends it through POST /api/invoices." />
-          <DemoRunner org={org} />
-        </Card>
-      ) : null}
       <Card className="mt-6 p-5 text-sm text-fg-muted">
         <p className="font-medium text-fg">Calling the API as an agent</p>
         <p className="mt-1">
