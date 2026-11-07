@@ -1,0 +1,13 @@
+{
+  "network": "whitechain-sepolia",
+  "chainId": 1874,
+  "deployedAt": null,
+  "deployer": null,
+  "contracts": {
+    "PaymentRouter": null,
+    "ProjectSplitter": null
+  },
+  "token": { "address": "0xcedfB56113143d55b2358b8CFbB0dEB5Ad2f55a7", "decimals": 6, "mock": false },
+  "splitterAllowList": [],
+  "note": "Not deployed yet. Run `node --env-file=.env scripts/deploy.mjs` (see README) and this file is rewritten with live addresses."
+}
