@@ -1,10 +1,10 @@
-# GatePay — Project Documentation
+# Sintingale — Project Documentation
 
 > **A Stripe-alternative payment gateway for SaaS, powered by Whitechain (settlement) and Arkiv (queryable, expiring billing ledger).**
 
 | | |
 |---|---|
-| **Project** | GatePay |
+| **Project** | Sintingale |
 | **Event** | ETHGlobal Mumbai |
 | **Sponsors targeted** | Whitechain, Arkiv (optional: World ID, Arc) |
 | **Document status** | Living document, v1.0 |
@@ -41,7 +41,7 @@
 
 ### 1.1 One-liner
 
-GatePay is drop-in payment infrastructure that lets SaaS founders create checkout links, invoices and subscription status without Stripe. Customers pay in USDT on Whitechain, and every invoice, receipt and subscription state lives as a queryable, expiring entity on Arkiv.
+Sintingale is drop-in payment infrastructure that lets SaaS founders create checkout links, invoices and subscription status without Stripe. Customers pay in USDT on Whitechain, and every invoice, receipt and subscription state lives as a queryable, expiring entity on Arkiv.
 
 ### 1.2 Problem
 
@@ -54,7 +54,7 @@ Indie, regional and crypto-native SaaS builders struggle with traditional proces
 
 ### 1.3 Solution
 
-GatePay provides:
+Sintingale provides:
 
 - A **merchant dashboard** to create products and prices.
 - **Checkout links** (and an embeddable flow) for customers.
@@ -139,7 +139,7 @@ flowchart LR
       M[Merchant Browser<br/>Dashboard UI]
     end
 
-    subgraph App["GatePay App (Next.js)"]
+    subgraph App["Sintingale App (Next.js)"]
       FE[Frontend Pages]
       API[API Routes]
     end
@@ -184,7 +184,7 @@ flowchart LR
 
 ### 4.3 Why two chains work together
 
-Whitechain and Arkiv are separate networks. GatePay bridges them in **application logic**, not trustlessly at the protocol level:
+Whitechain and Arkiv are separate networks. Sintingale bridges them in **application logic**, not trustlessly at the protocol level:
 
 1. The `PaymentRouter` contract emits a `Paid` event on Whitechain.
 2. The relayer observes it and writes a `receipt` entity on Arkiv containing the `txHash`.
@@ -229,14 +229,14 @@ Holds no customer funds. It pulls the exact amount from the payer and forwards i
 
 Stores all billing state as entities with attributes (indexes) and expiry. Full schema in [section 6](#6-data-model-arkiv).
 
-### 5.6 GatePay SDK (for SaaS backends)
+### 5.6 Sintingale SDK (for SaaS backends)
 
 A thin TypeScript package wrapping Arkiv queries:
 
 ```ts
-import { GatePay } from "@gatepay/sdk";
+import { Sintingale } from "@sintingale/sdk";
 
-const gp = new GatePay({ relayerAddress: "0x…", chain: "arkiv-testnet" });
+const gp = new Sintingale({ relayerAddress: "0x…", chain: "arkiv-testnet" });
 
 // Is this customer currently entitled to this plan?
 const active = await gp.hasAccess({
@@ -448,7 +448,7 @@ Content-Type: application/json
 ```json
 {
   "invoiceKey": "0x…",
-  "checkoutUrl": "https://gatepay.app/pay/0x…",
+  "checkoutUrl": "https://sintingale.app/pay/0x…",
   "expiresAt": 1767225600
 }
 ```
@@ -535,7 +535,7 @@ No code runs. The `invoice` entity's expiry passes and Arkiv stops returning it.
 ### 10.3 Sitemap
 
 ```
-/                         Landing page (what is GatePay)
+/                         Landing page (what is Sintingale)
 /dashboard                Merchant overview (stats, recent payments)
 /dashboard/products       Create and list plans
 /dashboard/invoices       Invoice table (paid, pending, expired)
@@ -752,10 +752,10 @@ NEXT_PUBLIC_WORLD_ID_APP_ID=…
 ## 13. Repository Structure
 
 ```
-gatepay/
+sintingale/
 ├─ README.md
 ├─ docs/
-│  └─ GatePay-Project-Documentation.md
+│  └─ ref_doc.md
 ├─ apps/
 │  └─ web/                         Next.js app (frontend + API routes)
 │     ├─ app/
@@ -775,7 +775,7 @@ gatepay/
 │     │  └─ charger.ts             (stretch) subscription charging
 │     └─ package.json
 ├─ packages/
-│  └─ sdk/                         @gatepay/sdk (hasAccess, listInvoices)
+│  └─ sdk/                         @sintingale/sdk (hasAccess, listInvoices)
 ├─ contracts/
 │  ├─ src/
 │  │  ├─ PaymentRouter.sol
@@ -869,7 +869,7 @@ World ID → subscriptions → sponsored gas → verification page → live-upda
 
 ## 17. Prize Alignment
 
-| Sponsor | How GatePay fits | Evidence to show |
+| Sponsor | How Sintingale fits | Evidence to show |
 |---|---|---|
 | **Whitechain** | A business-oriented payment rail: USDT settlement, a non-custodial payment contract, and a drop-in checkout. Gas abstraction through a sponsored relayer shows understanding of the WBT gas model | Deployed contract, live payment, explorer links |
 | **Arkiv** | Core application primitive, not just storage: attribute-indexed queries, expiring invoices, entitlements whose lifetime equals the billing period, `$creator` trust filtering, and live updates | Dashboard queries, expiry demo, `hasAccess()` |
@@ -913,7 +913,7 @@ World ID → subscriptions → sponsored gas → verification page → live-upda
 - **Recurring billing engine** with dunning and grace periods.
 - **Multiple attesters / decentralized relayers** to remove the single trusted writer.
 - **Multi-token and multi-chain** support, including USDC via Arc.
-- **Webhooks and an embeddable widget** (`<gatepay-checkout>`) for easier integration.
+- **Webhooks and an embeddable widget** (`<sintingale-checkout>`) for easier integration.
 - **ENS names** for merchants and billing subnames.
 - **Accounting exports** (CSV and ledger formats) built on Arkiv queries.
 - **Refund and dispute module** with merchant-signed refund entities.
@@ -930,7 +930,7 @@ World ID → subscriptions → sponsored gas → verification page → live-upda
 | **Attribute** | A key-value pair on an entity (string or numeric), used as a query index |
 | **Whitechain** | An EVM-compatible OP Stack Layer 2 that uses WBT as its gas token |
 | **WBT** | Whitechain's native gas token |
-| **PaymentRouter** | GatePay's smart contract that routes payments to merchants and emits events |
+| **PaymentRouter** | Sintingale's smart contract that routes payments to merchants and emits events |
 | **Relayer** | The service that bridges Whitechain events to Arkiv writes and optionally sponsors gas |
 | **Entitlement** | An Arkiv entity that grants a customer access to a plan until it expires |
 | **Receipt** | An Arkiv entity that records a completed payment with its `txHash` |
