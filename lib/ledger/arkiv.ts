@@ -1,8 +1,8 @@
 import { createPublicClient, createWalletClient, ExpirationTime } from "@arkiv-network/sdk";
 import { rabdi } from "@arkiv-network/sdk/chains";
 import { and, eq, gt, type Expression } from "@arkiv-network/sdk/query";
-import { defineSchema, key as keyValue, str, u64, type AnyColumn, type Schema } from "@arkiv-network/sdk/schema";
-import { http, type Hex } from "viem";
+import { bytes, defineSchema, key as keyValue, str, u64, type AnyColumn, type Schema } from "@arkiv-network/sdk/schema";
+import { hexToString, http, stringToHex, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import type { AttrsByType, EntityType } from "../schema";
 import type { Ledger, QueryFilter, StoredEntity } from "./types";
@@ -39,7 +39,8 @@ const INDEXES: Record<EntityType, { str: string[]; num: string[] }> = {
 
 const schemas = Object.fromEntries(
   (Object.keys(INDEXES) as EntityType[]).map((type) => {
-    const cols: Record<string, AnyColumn> = { data: str() };
+    // `str` values are capped at 128 bytes, so the full record is stored as UTF-8 JSON in a bytes column.
+    const cols: Record<string, AnyColumn> = { data: bytes() };
     for (const name of INDEXES[type].str) cols[name] = str().indexed();
     for (const name of INDEXES[type].num) cols[name] = u64().indexed();
     return [type, defineSchema(`sintingale.${type}`, cols)];
@@ -52,9 +53,12 @@ interface DataColumn {
   expiresAt: number;
 }
 
-type Row = { $key?: Hex; $creator?: Hex; data?: { value: string } };
+type Row = { $key?: Hex; $creator?: Hex; data?: { value: Hex } };
 
 const nowSec = () => Math.floor(Date.now() / 1000);
+
+/** Rabdi rejects lifetimes above ~182 days (7,884,000 blocks of 2 s); stay safely under it. */
+const MAX_TTL_SEC = 180 * 86400;
 
 export class ArkivLedger implements Ledger {
   readonly backend = "arkiv" as const;
@@ -70,17 +74,18 @@ export class ArkivLedger implements Ledger {
     this.walletClient = createWalletClient({ chain, transport: http(), account });
   }
 
-  async create<T extends EntityType>(type: T, attrs: AttrsByType[T], expiresAt: number): Promise<StoredEntity<T>> {
+  async create<T extends EntityType>(type: T, attrs: AttrsByType[T], requestedExpiresAt: number): Promise<StoredEntity<T>> {
     const createdAt = nowSec();
+    const expiresAt = createdAt + Math.min(MAX_TTL_SEC, Math.max(60, requestedExpiresAt - createdAt));
     const record = attrs as unknown as Record<string, unknown>;
     const values: Record<string, unknown> = {
-      data: str(JSON.stringify({ attrs, createdAt, expiresAt } satisfies DataColumn)),
+      data: bytes(stringToHex(JSON.stringify({ attrs, createdAt, expiresAt } satisfies DataColumn))),
     };
     for (const name of INDEXES[type].str) values[name] = str(String(record[name] ?? ""));
     for (const name of INDEXES[type].num) values[name] = u64(BigInt(Math.max(0, Math.floor(Number(record[name] ?? 0)))));
 
     const { entityKey } = await this.walletClient.createEntity(schemas[type], values as never, {
-      expiration: ExpirationTime.fromSeconds(Math.max(60, expiresAt - createdAt)),
+      expiration: ExpirationTime.fromSeconds(expiresAt - createdAt),
     });
     return { key: entityKey, type, attrs, creator: this.writer, createdAt, expiresAt };
   }
@@ -124,7 +129,7 @@ export class ArkivLedger implements Ledger {
     const now = nowSec();
     return result.entities
       .map((row) => {
-        const parsed = JSON.parse(row.data?.value ?? "{}") as DataColumn;
+        const parsed = JSON.parse(row.data?.value ? hexToString(row.data.value) : "{}") as DataColumn;
         return {
           key: row.$key ?? "",
           type,
