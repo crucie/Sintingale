@@ -33,17 +33,17 @@ No app server is involved: this reads straight from Rabdi.
 
 ```bash
 npm install
-node scripts/arkiv-query.mjs plan merchantId=m_demo --creator 0xf9277DD2A25085F868796073A9BF8c0d37F6bb06
+node scripts/arkiv-query.mjs merchant merchantId=m_sintingale --creator 0xf9277DD2A25085F868796073A9BF8c0d37F6bb06
 ```
 
 It prints the raw query, so you can also send it through JSON-RPC `arkiv_query`:
 
 ```
-arkiv.schema = str('sintingale.plan') AND merchantId = str('m_demo') AND $creator = addr(0xf9277DD2A25085F868796073A9BF8c0d37F6bb06)
+arkiv.schema = str('sintingale.merchant') AND merchantId = str('m_sintingale') AND $creator = addr(0xf9277DD2A25085F868796073A9BF8c0d37F6bb06)
 ```
 
-Swap `plan` for `receipt`, `invoice` or `entitlement`. The access check behind `hasAccess()` is
-`entitlement merchantId=m_demo planId=pro customer=0x… "periodEnd>now" --creator 0xf927…bb06`.
+Swap `merchant` for `plan`, `invoice`, `receipt` or `entitlement`. The access check behind `hasAccess()` is
+`entitlement merchantId=m_sintingale planId=<plan> customer=0x… "periodEnd>now" --creator 0xf927…bb06`.
 More queries are in [`arkiv/schema.md`](./arkiv/schema.md#queries-you-can-run).
 
 **Why this needs onchain stablecoin settlement on Whitechain:**
@@ -77,7 +77,7 @@ What the track asks to see:
   - the paying customer: `/pay/<invoiceKey>`, then `/receipt/<receiptKey>`.
 - **Past the first payment:**
   - **renewals:** each payment writes an entitlement that expires at the end of the billing period. Access then lapses
-    by itself, and paying a new invoice for the plan renews it. The 5-minute `flash` plan shows this live;
+    by itself, and paying a new invoice for the plan renews it. A plan billed "Every 5 minutes" shows this live;
   - **an accountant export:** *Export CSV* on the invoices page (`GET /api/invoices/export`) lists every paid invoice with amount, payer, tx hash, explorer link and Arkiv receipt key.
 - **Not a plain transfer:** `PaymentRouter.payInvoice` binds each payment to an invoice id, refuses double payment,
   and emits a `Paid` event the relayer checks against the Arkiv invoice.
@@ -123,17 +123,9 @@ flowchart LR
 
 ## Setup
 
-### Demo mode (no keys)
-
-```bash
-npm install
-npm run dev
-```
-
-Open http://localhost:3000. With no environment variables, the app uses an in-process emulation of Arkiv seeded
-with a demo merchant, and checkout runs a clearly labelled simulation.
-
-### Testnet mode (Whitechain Sepolia + Arkiv Rabdi)
+Sintingale has one mode: Arkiv is the database and Whitechain settles every payment. There is no seeded data, no
+simulated checkout and no fallback secret. Until the required variables in [`.env.example`](./.env.example) are set,
+every API returns `503 NOT_CONFIGURED` and lists what is missing.
 
 You need:
 
@@ -144,37 +136,41 @@ You need:
 - **[Foundry](https://getfoundry.sh)** to build and verify the contracts.
 
 ```bash
-cp .env.example .env               # then fill in DEPLOYER_PRIVATE_KEY, ARKIV_* and SESSION_SECRET
+cp .env.example .env               # fill in every required value (generate secrets with: openssl rand -hex 32)
 
+npm install
 cd contracts && forge build && forge test && cd ..
 node --env-file=.env scripts/deploy.mjs   # deploys PaymentRouter + ProjectSplitter, writes deployments.json
 # run the two `forge verify-contract … --verifier blockscout` commands it prints, from contracts/
+npm run build && npm start
 ```
 
-Put the printed addresses in `.env`, set `ARKIV_ENABLED=true`, then run `npm run dev` and follow the steps below.
-On the shared Rabdi ledger, the `m_demo` merchant and its plans already exist, so step 1 shows the profile form
-instead of setup.
+Put the printed contract addresses in `.env` before building. Then:
 
-1. **Merchant: create the merchant.** Go to Dashboard → Settings and connect the merchant wallet. On an empty
-   ledger, the form creates the merchant and the demo plans.
+1. **Merchant: create the merchant.** Go to Dashboard → Settings and connect the merchant wallet. The first time,
+   the form writes the merchant entity to Arkiv. The live deployment's `m_sintingale` merchant already exists.
 2. **Merchant: register on the router.** Click **Register payout on PaymentRouter** from the same wallet you saved
    as "Merchant wallet".
-3. **Merchant: create an invoice.** Go to Dashboard → Invoices → New and copy the checkout link.
-4. **Customer: pay.** Open the link, approve and pay. The success screen links the Whitechain tx and the Arkiv
+3. **Merchant: add plans** on the Products page. The example app at `/demo` sells whatever plans exist.
+4. **Merchant: create an invoice.** Go to Dashboard → Invoices → New and copy the checkout link.
+5. **Customer: pay.** Open the link, approve and pay. The success screen links the Whitechain tx and the Arkiv
    receipt.
-5. **Check the result.** The receipt page shows "verified". `/demo` unlocks for the paying wallet, and so does
+6. **Check the result.** The receipt page shows "verified". `/demo` unlocks for the paying wallet, and so does
    `GET /api/access`.
 
 ### Hosting on Vercel
 
 1. Import the repo at [vercel.com/new](https://vercel.com/new). Vercel detects Next.js; keep the defaults.
 2. Add the environment variables before the first deploy:
-   - **Required:** every `NEXT_PUBLIC_*` value from `.env.example`, plus `ARKIV_ENABLED=true`, `ARKIV_ACCESS_KEY`,
-     `ARKIV_PRIVATE_KEY`, `SESSION_SECRET`, `SINTINGALE_API_KEY` and `SPLITTER_ALLOWED_TOKEN`.
+   - **Required:** every `NEXT_PUBLIC_*` value from `.env.example`, plus `ARKIV_ACCESS_KEY`, `ARKIV_PRIVATE_KEY`,
+     `SINTINGALE_API_KEY` (16+ characters), `SESSION_SECRET` (32+ characters), `CRON_SECRET` and
+     `SPLITTER_ALLOWED_TOKEN`.
    - **Your URL:** set `NEXT_PUBLIC_APP_URL` and `SIWE_DOMAIN` to the deployment URL.
    - **Leave out** `DEPLOYER_PRIVATE_KEY`.
-3. Use Arkiv mode when hosted. Serverless instances don't share memory, so the in-memory ledger can't work across them.
-4. Redeploy after changing any `NEXT_PUBLIC_*` value. They are built into the app at build time.
+3. [`vercel.json`](./vercel.json) schedules the relayer backstop (`/api/relayer/tick`) once a day. Vercel Cron
+   authenticates with `CRON_SECRET`.
+4. Redeploy after changing any `NEXT_PUBLIC_*` value. They are built into the app at build time. The build also
+   checks the configuration and fails if a required variable is missing.
 
 ## Routes
 
@@ -237,7 +233,7 @@ import { Sintingale } from "./sintingale-sdk";
 
 const app = express();
 const gp = new Sintingale({ baseUrl: "https://sintingale.vercel.app", apiKey: process.env.SINTINGALE_API_KEY! });
-const merchantId = "m_demo";
+const merchantId = "m_sintingale";
 
 // Gate: one Arkiv query decides access (entitlement for this wallet and plan, still inside its period).
 app.get("/pro", async (req, res) => {
@@ -279,14 +275,11 @@ invoices are hidden, and checkout never looks up ENS. Payments, invoices and rec
   `isValidOrgEntity()` ([`lib/arkiv/trust.ts`](./lib/arkiv/trust.ts)) ignores anything that isn't owner-written or
   owner-signed. Receipts, payouts and claims must come from the relayer.
 
-**Try it without a Sepolia name:** on the in-memory ledger, Settings → enable Teams & ENS, then sign in as a seeded
-`.demo` identity (owner of `acme.demo`, alice, bob or carol). `.demo` is not an ENS TLD, so these can never be
-mistaken for real names.
-
-**Seed a real org:** `OWNER_PRIVATE_KEY=0x… ENS_NAME=yourname.eth npm run seed`. Wallets and faucets:
+**Set up a real org from the terminal:** `OWNER_PRIVATE_KEY=0x… ENS_NAME=yourname.eth npm run seed` links the name and
+creates a project; set its shares in the dashboard (an on-chain `createProject`). Wallets and faucets:
 [`scripts/fund.md`](./scripts/fund.md).
 
-**Demo script (brief 11.2):** link the name → project "Launch" with contributions 5 / 3 / 2 → invite alice, accept in a
+**Walkthrough:** link the name → project "Launch" with contributions 5 / 3 / 2 → invite alice, accept in a
 second browser profile, issue `alice.<name>` in the ENS app, approve → invoice 10 USDT on the project and pay as a
 customer without ENS → three payouts of 5.00 / 3.00 / 2.00 → alice claims 3.00 → create a 1-hour, 25 USDT agent grant
 and invoice as the agent, then over the cap → let a short invite and grant lapse.
@@ -313,8 +306,8 @@ npm run test:contracts   # Foundry: ProjectSplitter (14 tests incl. fuzzed "cred
 - **Expired invoices** disappear from Arkiv queries, so the dashboard's "Expired" list is remembered per browser.
 - **Plain-text emails.** The merchant billing email and invoice customer emails are stored in plain text on Arkiv.
   Use test data only.
-- **Process memory.** The demo ledger, relayer log cursor and used-nonce set live in process memory. Use Arkiv mode
-  for multi-instance hosting.
+- **Per-instance memory.** The relayer's log cursor, rate limits and the used-nonce set are kept per server instance.
+  All business data is on Arkiv, so this only affects replay windows and the backstop's starting block.
 - **180-day lifetime cap.** Rabdi's maximum entity lifetime is about 182 days, so every entity is capped at 180.
   Merchants and plans need a refresh within that window, and a yearly plan's entitlement ends at 180 days.
 - **No refunds or recurring pulls yet.** Renewal means paying a new invoice. `permit`-based pulls and one-click

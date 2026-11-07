@@ -7,7 +7,7 @@ A merchant's backend asks one question: "is this wallet paid up for this plan ri
 that is a public query any backend can run without Sintingale's server:
 
 ```bash
-node scripts/arkiv-query.mjs entitlement merchantId=m_demo planId=pro customer=0xCUSTOMER "periodEnd>now" --creator 0xf9277DD2A25085F868796073A9BF8c0d37F6bb06
+node scripts/arkiv-query.mjs entitlement merchantId=m_sintingale planId=pro customer=0xCUSTOMER "periodEnd>now" --creator 0xf9277DD2A25085F868796073A9BF8c0d37F6bb06
 ```
 
 With Postgres, the only way to get that answer is to call us and believe what comes back. If Sintingale is down, rate
@@ -37,4 +37,3 @@ can read the same records without an export.
 | Sign-in nonces and sessions | Stateless HMAC tokens in cookies | They live for 5 minutes, are private to one browser, and nothing else needs to read them. |
 | ENS ownership | ENS on Ethereum Sepolia, re-resolved at checkout | ENS is the source of truth. Keeping a copy would let it go stale, so checkout re-reads it and blocks payment on a mismatch. |
 | The "expired" label on old invoices | The merchant's browser (localStorage) | Arkiv correctly stops returning expired invoices. The label is a dashboard convenience, not shared state. |
-| Demo mode data | In-process memory ledger with the same interface | So the app runs with zero setup. Arkiv mode uses identical queries. |

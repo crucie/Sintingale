@@ -45,8 +45,8 @@ What worked well:
 
 ## When something broke
 
-Both of these surfaced only on the first real write to Rabdi. The in-memory ledger we had developed against, and
-TypeScript, accepted the same calls.
+Both of these surfaced only on the first real write to Rabdi. The in-memory ledger we had developed against (since
+removed: Sintingale now runs on Arkiv only), and TypeScript, accepted the same calls.
 
 ### 1. A `str` attribute silently caps at 128 bytes
 

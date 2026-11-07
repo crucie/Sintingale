@@ -1,6 +1,6 @@
 # How we use Arkiv
 
-Arkiv is Sintingale's only database in production mode (`ARKIV_ENABLED=true`). Every Arkiv feature we use
+Arkiv is Sintingale's only database: there is no other store and no fallback. Every Arkiv feature we use
 maps to something a merchant, a customer or a SaaS backend can see. The full entity list is in
 [`schema.md`](./schema.md).
 
@@ -9,7 +9,7 @@ maps to something a merchant, a customer or a SaaS backend can see. The full ent
 | Arkiv feature | Where | What the user sees |
 |---|---|---|
 | **Attribute queries** (`eq` on `merchantId`, `planId`, `customer`; `gt` on `periodEnd`) | `hasAccess()` in [`lib/sintingale.ts`](../lib/sintingale.ts), `GET /api/access` | The `/demo` SaaS page unlocks right after payment, and locks again later. The access check is one query: no join, no cache, no cron. |
-| **Expiration** on `entitlement` (`expiresAt = periodEnd`) | Relayer, after a verified payment | Access ends by itself when the billing period ends. The `flash` plan (5 minutes) shows this live in the demo. |
+| **Expiration** on `entitlement` (`expiresAt = periodEnd`) | Relayer, after a verified payment | Access ends by itself when the billing period ends. A plan billed every 5 minutes shows this live. |
 | **Expiration** on `invoice` (`dueAt + 120 s`) | Invoice creation | An unpaid checkout link stops working at its due time, and the checkout page shows "expired". Nothing has to clean it up. |
 | **Expiration** on `invite` (48 h) and `grant` (owner picks 3 min to 30 days) | Teams & agents | Invite links die on schedule. An agent's "create invoices up to 25 USDT for 24 h" permission ends exactly when its grant expires. |
 | **`$creator` filter** (`.createdBy(writer)`) | Every read of `receipt`, `entitlement`, `payout`, `claim` | The receipt page's first check, "Written by the Sintingale relayer", reads `$creator`. A forged receipt written by anyone else never counts as paid and never unlocks access. |

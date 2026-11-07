@@ -50,7 +50,7 @@ merchant bills by email. The demo only uses test addresses. Hashing these is on 
 | `entitlement` | `merchantId`, `planId`, `customer`, `invoiceId`, `periodEnd` | `hasAccess()` / `GET /api/access`, `/demo` paywall, "active entitlements" stat | `periodEnd`, the end of the billing period. Access ends when the entity expires. |
 
 Billing periods are 30 days for one-time plans, 7 for weekly, 30 for monthly, 365 for yearly and 5 minutes
-for the `flash` demo plan.
+for plans billed every 5 minutes.
 
 **The 180-day cap.** Rabdi rejects any lifetime longer than about 182 days (7,884,000 blocks). The ledger caps
 every lifetime at 180 days ([`lib/ledger/arkiv.ts`](../lib/ledger/arkiv.ts)), so anything the app asks to keep
@@ -81,15 +81,15 @@ raw `arkiv_query` string, so you can also send it over JSON-RPC.
 
 ```bash
 # Is this wallet on the Pro plan right now? This is the query behind hasAccess().
-node scripts/arkiv-query.mjs entitlement merchantId=m_demo planId=pro customer=0xCUSTOMER "periodEnd>now" --creator 0xf9277DD2A25085F868796073A9BF8c0d37F6bb06
-# → arkiv.schema = str('sintingale.entitlement') AND merchantId = str('m_demo') AND planId = str('pro')
+node scripts/arkiv-query.mjs entitlement merchantId=m_sintingale planId=pro customer=0xCUSTOMER "periodEnd>now" --creator 0xf9277DD2A25085F868796073A9BF8c0d37F6bb06
+# → arkiv.schema = str('sintingale.entitlement') AND merchantId = str('m_sintingale') AND planId = str('pro')
 #   AND customer = str('0x…') AND periodEnd > u64(<now>) AND $creator = addr(0xf9277DD2A25085F868796073A9BF8c0d37F6bb06)
 
 # Every trusted receipt for the merchant
-node scripts/arkiv-query.mjs receipt merchantId=m_demo --creator 0xf9277DD2A25085F868796073A9BF8c0d37F6bb06
+node scripts/arkiv-query.mjs receipt merchantId=m_sintingale --creator 0xf9277DD2A25085F868796073A9BF8c0d37F6bb06
 
 # Open invoices (expired ones are already gone)
-node scripts/arkiv-query.mjs invoice merchantId=m_demo
+node scripts/arkiv-query.mjs invoice merchantId=m_sintingale
 ```
 
 Customer addresses are stored lower-case.
