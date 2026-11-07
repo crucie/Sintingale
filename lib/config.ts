@@ -32,10 +32,17 @@ export const onchainEnabled = Boolean(publicConfig.paymentRouter && publicConfig
 /** Project invoices settle through the ProjectSplitter; without it they cannot be created. */
 export const splitterEnabled = Boolean(publicConfig.splitter && publicConfig.usdt.address);
 
+/** Accepts a pasted key with or without `0x`, quotes or surrounding whitespace. */
+function privateKey(raw: string | undefined): `0x${string}` | undefined {
+  const v = (raw ?? "").trim().replace(/^["']|["']$/g, "").trim();
+  if (!v) return undefined;
+  return (v.startsWith("0x") ? v : `0x${v}`) as `0x${string}`;
+}
+
 /** Server-only configuration. Never import this from a client component. */
 export function serverConfig() {
   return {
-    arkivPrivateKey: (process.env.ARKIV_PRIVATE_KEY || undefined) as `0x${string}` | undefined,
+    arkivPrivateKey: privateKey(process.env.ARKIV_PRIVATE_KEY),
     arkivAccessKey: process.env.ARKIV_ACCESS_KEY || "",
     apiKey: process.env.SINTINGALE_API_KEY || "",
     invoiceGraceSec: Number(process.env.INVOICE_GRACE_SEC || 120),

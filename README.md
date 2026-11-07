@@ -169,8 +169,9 @@ Put the printed contract addresses in `.env` before building. Then:
    - **Leave out** `DEPLOYER_PRIVATE_KEY`.
 3. [`vercel.json`](./vercel.json) schedules the relayer backstop (`/api/relayer/tick`) once a day. Vercel Cron
    authenticates with `CRON_SECRET`.
-4. Redeploy after changing any `NEXT_PUBLIC_*` value. They are built into the app at build time. The build also
-   checks the configuration and fails if a required variable is missing.
+4. Redeploy after changing any `NEXT_PUBLIC_*` value. They are built into the app at build time. Server secrets are
+   read per request: if one is missing, the app still builds, every API returns `503 NOT_CONFIGURED`, and
+   Dashboard → Settings lists the missing variables.
 
 ## Routes
 
