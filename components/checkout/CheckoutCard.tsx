@@ -33,6 +33,7 @@ import { RECURRENCE_LABEL } from "@/lib/schema";
 import { formatBps } from "@/lib/splits";
 import { explorerTx } from "@/lib/whitechain";
 import { usePayment } from "./PayButton";
+import { ReadinessList, usePaymentReadiness } from "./PaymentReadiness";
 import { TxStatus } from "./TxStatus";
 
 function Shell({ children, footer }: { children: ReactNode; footer?: ReactNode }) {
@@ -74,6 +75,13 @@ export function CheckoutCard({ invoiceKey }: { invoiceKey: string }) {
   const now = useNow();
   const { isConnected, address } = useConnection();
   const payment = usePayment(checkout.data, invoiceKey);
+  const readiness = usePaymentReadiness({
+    payer: isConnected ? address : undefined,
+    amount: checkout.data?.invoice.amount ?? 0,
+    merchantWallet: checkout.data?.merchant.wallet || checkout.data?.merchant.payout || "",
+    merchantPayout: checkout.data?.merchant.payout ?? "",
+    isProject: Boolean(checkout.data?.project && checkout.data?.invoice.projectId),
+  });
 
   if (checkout.isLoading) {
     return (
@@ -92,7 +100,7 @@ export function CheckoutCard({ invoiceKey }: { invoiceKey: string }) {
       <Shell>
         {expired ? (
           <StateBlock icon={<Hourglass className="size-7" />} tone="bg-muted text-fg-muted" title="This invoice has expired.">
-            The invoice entity reached its expiry on the ledger and can no longer be paid. Ask the merchant for a new link.
+            This payment link is past its due date and can no longer be paid. Ask the seller for a new link.
           </StateBlock>
         ) : (
           <StateBlock icon={<AlertCircle className="size-7" />} tone="bg-danger-soft text-danger" title="Couldn't load this invoice">
@@ -181,7 +189,7 @@ export function CheckoutCard({ invoiceKey }: { invoiceKey: string }) {
             <CheckCircle2 className="size-5" aria-hidden /> Payment complete
           </p>
           <p className="mt-1 text-sm text-fg-muted">
-            {invoice.paidAt ? `Paid ${formatDate(invoice.paidAt)}. ` : ""}Your receipt and access entitlement are on the ledger.
+            {invoice.paidAt ? `Paid ${formatDate(invoice.paidAt)}. ` : ""}{plan ? "Your access is active now." : "Your receipt is ready."}
           </p>
         </div>
         <dl className="mt-5 space-y-3 text-sm">
@@ -238,6 +246,10 @@ export function CheckoutCard({ invoiceKey }: { invoiceKey: string }) {
       </Button>
     ) : needsWallet ? (
       <ConnectButton size="lg" className="w-full" />
+    ) : !readiness.ready && payment.phase === "ready" ? (
+      <Button size="lg" className="w-full" disabled variant="outline" loading={readiness.pending && !readiness.blockingReason}>
+        {readiness.blockingReason ?? "Checking your wallet…"}
+      </Button>
     ) : (
       <NetworkGuard>
         <Button
@@ -315,6 +327,19 @@ export function CheckoutCard({ invoiceKey }: { invoiceKey: string }) {
           You are connected as {shortHash(address)}. Access will be granted to the billed address {shortHash(lockedCustomer)}.
         </p>
       ) : null}
+
+      {chainMode && !isConnected ? (
+        <div className="mt-5 rounded-2xl border border-border p-4 text-sm">
+          <p className="font-medium text-fg">How paying works</p>
+          <ol className="mt-2 list-decimal space-y-1 pl-5 text-fg-muted">
+            <li>Connect a wallet on Whitechain Sepolia that holds USDT and a little WBT for the fee.</li>
+            <li>Approve this exact amount of USDT (first wallet prompt).</li>
+            <li>Confirm the payment (second prompt). Your receipt appears here a few seconds later.</li>
+          </ol>
+        </div>
+      ) : null}
+
+      {chainMode && isConnected && payment.phase === "ready" ? <ReadinessList readiness={readiness} /> : null}
 
       {!chainMode ? (
         <p className="mt-3 flex items-start gap-2 rounded-xl border border-danger/40 bg-danger-soft px-3 py-2 text-xs text-fg">

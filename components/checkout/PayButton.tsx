@@ -22,12 +22,14 @@ interface Result {
 type StepId = "approve" | "pay" | "record";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Wallet and contract errors in words a customer can act on. */
 const errMessage = (err: unknown) => {
-  if (err instanceof Error) {
-    const short = (err as { shortMessage?: string }).shortMessage;
-    return short ?? err.message.split("\n")[0];
-  }
-  return "Payment failed";
+  const raw = err instanceof Error ? ((err as { shortMessage?: string }).shortMessage ?? err.message) : String(err);
+  if (/user rejected|user denied|rejected the request/i.test(raw)) return "You cancelled the request in your wallet. Nothing was charged.";
+  if (/insufficient funds/i.test(raw)) return "Your wallet needs a little WBT on Whitechain to pay the network fee.";
+  if (/UnregisteredMerchant/i.test(raw)) return "This seller hasn't finished setting up payments yet. Nothing was charged.";
+  if (/AlreadyPaid/i.test(raw)) return "This invoice has already been paid.";
+  return raw.split("\n")[0] || "Payment failed";
 };
 
 /** approve → pay → relayer receipt, as an explicit state machine the UI can render step by step. */
@@ -92,7 +94,7 @@ export function usePayment(data: CheckoutData | undefined, invoiceKey: string) {
         args: [address],
         chainId: whitechain.id,
       });
-      if (balance < amount) throw new Error("Insufficient USDT balance for this invoice.");
+      if (balance < amount) throw new Error("Not enough USDT in this wallet for this invoice.");
 
       setPhase("awaiting-wallet");
       const allowance = await readContract(config, {
@@ -103,7 +105,7 @@ export function usePayment(data: CheckoutData | undefined, invoiceKey: string) {
         chainId: whitechain.id,
       });
       if (allowance < amount) {
-        mark("approve", "active", "Confirm the approval in your wallet");
+        mark("approve", "active", "Confirm in your wallet: allow this exact amount");
         const approveHash = await write.mutateAsync({
           address: token,
           abi: erc20Abi,
@@ -112,11 +114,11 @@ export function usePayment(data: CheckoutData | undefined, invoiceKey: string) {
           chainId: whitechain.id,
         });
         setPhase("confirming");
-        mark("approve", "active", "Waiting for approval to confirm");
+        mark("approve", "active", "Waiting for Whitechain to confirm");
         await waitForTransactionReceipt(config, { hash: approveHash, chainId: whitechain.id });
-        mark("approve", "done", "Approved");
+        mark("approve", "done", "Allowed");
       } else {
-        mark("approve", "skipped", "Allowance already sufficient");
+        mark("approve", "skipped", "Already allowed");
       }
 
       current = "pay";
@@ -138,15 +140,15 @@ export function usePayment(data: CheckoutData | undefined, invoiceKey: string) {
             chainId: whitechain.id,
           });
       setPhase("confirming");
-      mark("pay", "active", `Tx ${payHash.slice(0, 10)}… confirming`);
+      mark("pay", "active", "Waiting for Whitechain to confirm (a few seconds)");
       const receipt = await waitForTransactionReceipt(config, { hash: payHash as Hex, chainId: whitechain.id });
       if (receipt.status !== "success") throw new Error("The payment transaction reverted.");
       mark("pay", "done", `Confirmed in block ${receipt.blockNumber}`);
 
       current = "record";
-      mark("record", "active", isProject ? "Relayer verifying the Credited events" : "Relayer verifying the Paid event");
+      mark("record", "active", "Checking the payment and issuing your receipt");
       const res = await notify({ txHash: payHash, payer: address });
-      mark("record", "done", `Receipt ${res.receiptKey.slice(0, 10)}…`);
+      mark("record", "done", "Receipt issued");
       setResult(res);
       setPhase("success");
       qc.invalidateQueries({ queryKey: ["checkout", invoiceKey] });
@@ -164,9 +166,9 @@ export function usePayment(data: CheckoutData | undefined, invoiceKey: string) {
   }, []);
 
   const stepList: Step[] = [
-    { id: "approve", label: "Approve USDT", ...steps.approve },
-    { id: "pay", label: data?.project ? "Pay project on Whitechain (split by contribution)" : "Pay invoice on Whitechain", ...steps.pay },
-    { id: "record", label: data?.project ? "Receipt and payouts written to Arkiv" : "Receipt written to Arkiv", ...steps.record },
+    { id: "approve", label: "Allow USDT", ...steps.approve },
+    { id: "pay", label: data?.project ? "Send payment (split between the team)" : "Send payment", ...steps.pay },
+    { id: "record", label: "Get your receipt", ...steps.record },
   ];
 
   return { phase, error, result, steps: stepList, pay, reset };
