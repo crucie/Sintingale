@@ -6,25 +6,21 @@ import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useConnection } from "wagmi";
-import { checkAccessAction, startCheckoutAction } from "@/app/demo/actions";
+import { checkAccessAction, loadStoreAction, startCheckoutAction } from "@/app/demo/actions";
 import { ExpiryCountdown } from "@/components/dashboard/ExpiryCountdown";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Field";
 import { Logo } from "@/components/ui/Logo";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { ConnectButton } from "@/components/wallet/ConnectButton";
-import { DEMO_CUSTOMERS } from "@/lib/demo";
-import { cn, shortHash } from "@/lib/format";
-
-const PLANS = [
-  { id: "pro", label: "Pro Plan · 10 USDT / month" },
-  { id: "team", label: "Team · 49 USDT / month" },
-  { id: "flash", label: "Flash Pass · 1 USDT / 5 min" },
-];
+import { publicConfig } from "@/lib/config";
+import { cn, formatUsdt, shortHash } from "@/lib/format";
+import { RECURRENCE_LABEL } from "@/lib/schema";
 
 const isAddress = (v: string) => /^0x[0-9a-fA-F]{40}$/.test(v);
 
-function FakeAnalytics() {
+/** Placeholder content of the example SaaS product that sits behind the paywall. */
+function SampleAnalytics() {
   const bars = [42, 68, 51, 80, 63, 92, 74, 88, 70, 96, 84, 100];
   return (
     <div className="grid gap-4 md:grid-cols-3">
@@ -54,13 +50,19 @@ function FakeAnalytics() {
 export function DemoApp() {
   const { address } = useConnection();
   const [input, setInput] = useState("");
-  const [customer, setCustomer] = useState<string | null>(null);
-  const [planId, setPlanId] = useState("pro");
+  const [checked, setChecked] = useState<string | null>(null);
+  const [selectedPlanId, setPlanId] = useState("");
+  const store = useQuery({ queryKey: ["example-store"], queryFn: () => loadStoreAction() });
+  const plans = store.data?.plans ?? [];
+  const planId = selectedPlanId || plans[0]?.planId || "";
+  const plan = plans.find((p) => p.planId === planId);
+  // Until another wallet is checked by hand, the connected wallet is the visitor.
+  const customer = checked ?? address ?? null;
 
   const access = useQuery({
     queryKey: ["demo-access", customer, planId],
     queryFn: () => checkAccessAction(customer!, planId),
-    enabled: Boolean(customer),
+    enabled: Boolean(customer && planId),
     refetchInterval: 5_000,
   });
 
@@ -78,7 +80,7 @@ export function DemoApp() {
       return;
     }
     setInput(value);
-    setCustomer(value);
+    setChecked(value);
   };
 
   const active = access.data?.active ?? false;
@@ -88,8 +90,8 @@ export function DemoApp() {
       <header className="border-b border-border bg-bg">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-3 px-4">
           <div className="flex items-center gap-3">
-            <span className="font-display text-lg font-bold text-fg">Acme Analytics</span>
-            <span className="rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand">demo SaaS</span>
+            <span className="font-display text-lg font-bold text-fg">{store.data?.merchantName ?? "Example SaaS"}</span>
+            <span className="rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand">example app</span>
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
@@ -104,7 +106,8 @@ export function DemoApp() {
         <section className="rounded-3xl border border-border bg-bg p-5 sm:p-6">
           <h1 className="font-display text-2xl font-bold tracking-tight text-fg">Who is visiting?</h1>
           <p className="mt-1 text-sm text-fg-muted">
-            This page plays the merchant&apos;s backend. It asks Sintingale one question: does this wallet hold a live entitlement for the plan?
+            This page plays the merchant&apos;s backend. It asks Sintingale one question: does this wallet hold a live entitlement for the
+            plan? Plans come from the merchant&apos;s catalogue on Arkiv.
           </p>
           <form
             className="mt-5 grid gap-4 md:grid-cols-[1fr_260px_auto] md:items-end"
@@ -117,40 +120,45 @@ export function DemoApp() {
               <Input
                 id="demo-customer"
                 className="font-mono"
-                placeholder="0x…"
+                placeholder={address ?? "0x…"}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 autoComplete="off"
               />
             </Field>
             <Field label="Plan" htmlFor="demo-plan">
-              <Select id="demo-plan" value={planId} onChange={(e) => setPlanId(e.target.value)}>
-                {PLANS.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label}
-                  </option>
-                ))}
+              <Select id="demo-plan" value={planId} onChange={(e) => setPlanId(e.target.value)} disabled={!plans.length}>
+                {plans.length ? (
+                  plans.map((p) => (
+                    <option key={p.planId} value={p.planId}>
+                      {p.name} · {formatUsdt(p.amount)} / {RECURRENCE_LABEL[p.recurrence].toLowerCase()}
+                    </option>
+                  ))
+                ) : (
+                  <option value="">{store.isLoading ? "Loading plans…" : "No plans yet"}</option>
+                )}
               </Select>
             </Field>
-            <Button type="submit" icon={<Search className="size-4" />} loading={access.isFetching && !access.data}>
+            <Button type="submit" icon={<Search className="size-4" />} loading={access.isFetching && !access.data} disabled={!plans.length}>
               hasAccess()
             </Button>
           </form>
           <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
-            <span className="text-fg-muted">Try:</span>
             {address ? (
               <button onClick={() => check(address)} className="rounded-full border border-border px-3 py-1.5 font-mono hover:border-brand hover:text-brand">
-                My wallet {shortHash(address)}
+                Use my wallet {shortHash(address)}
               </button>
             ) : (
-              <ConnectButton size="sm" />
+              <>
+                <span className="text-fg-muted">Connect the wallet you pay with:</span>
+                <ConnectButton size="sm" />
+              </>
             )}
-            <button onClick={() => check(DEMO_CUSTOMERS.withPro)} className="rounded-full border border-border px-3 py-1.5 font-mono hover:border-brand hover:text-brand">
-              {shortHash(DEMO_CUSTOMERS.withPro)} (has Pro)
-            </button>
-            <button onClick={() => check(DEMO_CUSTOMERS.noAccess)} className="rounded-full border border-border px-3 py-1.5 font-mono hover:border-brand hover:text-brand">
-              {shortHash(DEMO_CUSTOMERS.noAccess)} (no access)
-            </button>
+            {!store.isLoading && !plans.length ? (
+              <span className="text-fg-muted">
+                The merchant has no plans yet. Add one in <Link href="/dashboard/products" className="text-brand hover:underline">Products</Link>.
+              </span>
+            ) : null}
           </div>
         </section>
 
@@ -179,7 +187,7 @@ export function DemoApp() {
             </div>
             {!active ? (
               <Button onClick={() => buy.mutate()} loading={buy.isPending} icon={<ArrowRight className="size-4" />}>
-                Buy {PLANS.find((p) => p.id === planId)?.label.split(" · ")[0]}
+                Buy {plan?.name ?? "plan"} · {plan ? formatUsdt(plan.amount) : ""}
               </Button>
             ) : null}
           </section>
@@ -188,7 +196,7 @@ export function DemoApp() {
         <section className="relative overflow-hidden rounded-3xl border border-border bg-surface p-5 sm:p-6">
           <h2 className="mb-4 font-display text-lg font-semibold text-fg">Pro analytics</h2>
           <div className={cn("transition-all duration-500", !active && "pointer-events-none select-none blur-md")} aria-hidden={!active}>
-            <FakeAnalytics />
+            <SampleAnalytics />
           </div>
           {!active ? (
             <div className="absolute inset-0 grid place-items-center bg-bg/40 p-6 text-center">
@@ -206,7 +214,7 @@ export function DemoApp() {
             <Code2 className="size-4" aria-hidden /> What the backend runs
           </p>
           <pre className="mt-3 overflow-x-auto font-mono text-xs leading-relaxed">{`const active = await sintingale.hasAccess({
-  merchantId: "m_demo",
+  merchantId: "${publicConfig.merchantId}",
   planId: "${planId}",
   customer: "${customer ?? "0x…"}",
 });`}</pre>
