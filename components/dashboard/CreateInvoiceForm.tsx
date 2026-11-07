@@ -53,7 +53,7 @@ export function CreateInvoiceForm({ initialPlanId }: { initialPlanId?: string })
         dueInHours,
       });
       setResult(res);
-      toast.success(`Invoice ${res.invoiceId} written to the ledger`);
+      toast.success("Checkout link ready to share");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not create invoice");
     }
@@ -81,9 +81,9 @@ export function CreateInvoiceForm({ initialPlanId }: { initialPlanId?: string })
     return (
       <Card className="mx-auto max-w-xl p-6 text-center">
         <CheckCircle2 className="mx-auto size-10 text-success" aria-hidden />
-        <h2 className="mt-3 font-display text-xl font-semibold">Invoice {result.invoiceId} is live</h2>
+        <h2 className="mt-3 font-display text-xl font-semibold">Your checkout link is ready</h2>
         <p className="mt-1 text-sm text-fg-muted">
-          The invoice entity expires on Arkiv at {formatDate(result.expiresAt)} unless it is paid.
+          Send this link or QR code to your customer. It stops working at {formatDate(result.expiresAt)} if unpaid.
         </p>
         <div className="mx-auto mt-6 w-fit rounded-2xl border border-border bg-white p-4">
           <QRCodeSVG value={result.checkoutUrl} size={168} fgColor="#1d1410" />

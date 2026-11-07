@@ -16,7 +16,7 @@ export default function NewInvoicePage({ searchParams }: PageProps<"/dashboard/i
     <>
       <PageHeader
         title="Create invoice"
-        description="Writes an invoice entity that expires at its due date plus a short grace period."
+        description="Get a payment link and QR code to send a customer. Unpaid links expire on their due date."
       />
       <Suspense fallback={<Skeleton className="h-96 w-full" />}>
         <FormWithPlan searchParams={searchParams} />

@@ -14,7 +14,7 @@ export function InvoicesView() {
     <>
       <PageHeader
         title="Invoices"
-        description="Paid means a relayer receipt exists. Pending invoices expire on their own."
+        description="Paid invoices are confirmed on Whitechain. Unpaid ones expire on their own at their due date."
         action={
           <div className="flex gap-2">
             <Button

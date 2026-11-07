@@ -43,7 +43,7 @@ export function PlanForm() {
         amount,
         recurrence,
       });
-      toast.success(`${plan.name} saved as a plan entity`);
+      toast.success(`${plan.name} saved. Create a checkout link for it from Invoices.`);
       setName("");
       setPlanId("");
       setPlanIdTouched(false);
@@ -56,7 +56,7 @@ export function PlanForm() {
 
   return (
     <Card>
-      <CardHeader title="New product" description="Each product is a plan entity on Arkiv with an indexed price." />
+      <CardHeader title="New product" description="Set a name and price. Customers see exactly this at checkout." />
       <form onSubmit={onSubmit} className="grid gap-6 p-5 md:grid-cols-[1fr_minmax(260px,340px)]">
         <div className="grid content-start gap-5 sm:grid-cols-2">
           <Field label="Name" htmlFor="plan-name" className="sm:col-span-2">
@@ -69,19 +69,6 @@ export function PlanForm() {
               onChange={(e) => setName(e.target.value)}
             />
           </Field>
-          <Field label="Plan ID" htmlFor="plan-id" hint="Used by hasAccess() in your backend.">
-            <Input
-              id="plan-id"
-              required
-              placeholder="pro"
-              className="font-mono"
-              value={effectivePlanId}
-              onChange={(e) => {
-                setPlanIdTouched(true);
-                setPlanId(slugify(e.target.value));
-              }}
-            />
-          </Field>
           <Field label="Price (USDT)" htmlFor="plan-amount">
             <Input
               id="plan-amount"
@@ -92,7 +79,7 @@ export function PlanForm() {
               onChange={(e) => setAmount(e.target.value)}
             />
           </Field>
-          <Field label="Billing" htmlFor="plan-recurrence" className="sm:col-span-2">
+          <Field label="Billing" htmlFor="plan-recurrence" hint="Recurring plans grant access for one period per payment.">
             <Select
               id="plan-recurrence"
               value={recurrence}
@@ -114,6 +101,24 @@ export function PlanForm() {
               onChange={(e) => setDescription(e.target.value)}
             />
           </Field>
+          <details className="group sm:col-span-2">
+            <summary className="cursor-pointer text-sm text-fg-muted hover:text-fg">
+              Developer setting: plan ID <span className="font-mono text-xs text-fg">{effectivePlanId || "…"}</span>
+            </summary>
+            <Field label="Plan ID" htmlFor="plan-id" hint="Made from the name. Your backend checks access with it, e.g. hasAccess({ planId })." className="mt-3">
+              <Input
+                id="plan-id"
+                required
+                placeholder="pro"
+                className="font-mono"
+                value={effectivePlanId}
+                onChange={(e) => {
+                  setPlanIdTouched(true);
+                  setPlanId(slugify(e.target.value));
+                }}
+              />
+            </Field>
+          </details>
           <div className="sm:col-span-2">
             <Button type="submit" loading={create.isPending} className="w-full sm:w-auto" icon={<PackagePlus className="size-4" />}>
               Save product
